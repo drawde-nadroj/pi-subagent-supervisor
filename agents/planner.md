@@ -1,6 +1,6 @@
 ---
 name: planner
-displayName: Tuco
+auto: true
 description: "Use when the user requests a written implementation plan for approval or handoff. Present the plan and stop; implementation follows only when the same original request explicitly asked to both plan and implement, otherwise wait for later approval. Do not use for implementing an existing plan. Produces a concrete ordered plan grounded in real code. NOT for broad codebase discovery (scout), investigating an unconfirmed reported failure (debugger), editing (worker), challenging a risky decision (oracle), tests as deliverable (test-writer), or review (reviewer)."
 thinking: medium
 readonly: true

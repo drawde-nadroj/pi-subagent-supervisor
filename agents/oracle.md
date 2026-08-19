@@ -1,6 +1,6 @@
 ---
 name: oracle
-displayName: Light
+auto: true
 description: "Use for a second opinion that challenges an existing plan, design, or risky/contested decision BEFORE acting. Give it the proposed approach plus relevant files; it verifies assumptions, names failure modes, and recommends the best-supported next move. Read-only. NOT for creating an implementation plan from a goal (planner), checking the correctness of a current diff (reviewer), implementation, or known failures (debugger)."
 thinking: medium
 readonly: true

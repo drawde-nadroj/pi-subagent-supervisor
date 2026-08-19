@@ -1,8 +1,9 @@
 ---
 name: debugger
-displayName: MacGyver
+auto: true
 description: "Use when there is a concrete known failure: an observed non-zero test/build exit, stack trace, crash, incorrect result against a stated oracle, or flaky-failure artifact. Delegate BEFORE investigating: debugger owns reproduction, diagnosis, the confirmed fix, and verification. The only inline exception is an error message that alone pinpoints a trivial one-line fix. NOT for new features, test-writing as the requested artifact, vague suspicion without an observed symptom, or diff-only review."
 thinking: low
+tools: [read, bash, edit, write]
 color: pink
 conventions: true
 spawn: [scout, reviewer, test-writer]

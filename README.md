@@ -13,7 +13,7 @@ A Pi extension for delegating focused work to isolated child sessions. It discov
 
 ## Bundled roles
 
-The package works without copying agent files. It bundles `scout`, `planner`, `worker`, `test-writer`, `reviewer`, `debugger`, and `oracle`. Their descriptions define when Pi should route work to them.
+The package works without copying agent files. It bundles `scout`, `planner`, `worker`, `test-writer`, `reviewer`, `debugger`, and `oracle`. These durable role names are also their slash-command names. All seven opt into automatic routing. `scout`, `planner`, `reviewer`, and `oracle` are read-only. `worker`, `test-writer`, and `debugger` can change files and run shell commands, with only `read`, `bash`, `edit`, and `write`. Their descriptions define when Pi should route work to them.
 
 ## Install
 
@@ -48,6 +48,8 @@ For one session without installing, use `pi -e /absolute/path/to/pi-subagent-sup
 - `/agents returns on|off` controls structured-return enforcement.
 - `/stop-agents` stops active runs.
 - `/<role> <task>` runs one discovered role.
+
+Automatic and explicit subagent runs call the configured model and can add provider usage, cost, and latency. Parallel work can reduce elapsed time but multiply usage; retries and dependent or nested delegation can extend completion time. Use `/agents stats` to inspect recorded totals.
 
 The model-facing tool accepts exactly one mode:
 
@@ -90,9 +92,9 @@ Compatibility aliases remain supported: `fallbackModels` for `fallback`, `fork` 
 
 ## Customization
 
-Dashboard changes to `auto` are staged until confirmed. Package-managed bundled files are never changed: editing a bundled role or staging its `auto` value creates a same-name user override under `~/.pi/agent/agents`. A bundled identity cannot be renamed in place; create a new role instead. Bundled roles cannot be deleted. Deleting a user override can reveal the bundled default beneath it.
+To disable automatic routing for a role, open `/agents`, select the role, press the configured Toggle key (`space` by default) to stage the change, then press the configured Confirm key twice (`Enter` by default) to apply it. Dashboard changes to `auto` are staged, not applied immediately: confirm the staged changes to write them, or cancel to leave disk unchanged. Package-managed bundled files are never changed: editing a bundled role or confirming its staged `auto` value creates a same-name user override under `~/.pi/agent/agents`. A bundled identity cannot be renamed in place; create a new role instead. Bundled roles cannot be deleted. Deleting a user override can reveal the bundled default beneath it.
 
-Project and user definitions are ordinary files and retain their normal dashboard behavior. The editor supports role prompts, routing fields, model/fallback settings, tools, delegation, and returns schemas.
+User definitions remain editable in the dashboard. Trusted project definitions are discovered and can be opened from the dashboard, but the dashboard does not edit, toggle, rename, or delete them; edit those source files externally. This keeps project-controlled paths outside the extension's write boundary. The user-agent editor supports role prompts, routing fields, model/fallback settings, tools, delegation, and returns schemas.
 
 ## Execution details
 
@@ -102,7 +104,7 @@ Child output is summarized back to the parent. A `returns` schema adds validatio
 
 ## Local data and privacy
 
-Preferences and history live outside the installed package under `~/.pi/agent/pi-subagents/` (or the configured Pi agent directory). `state.json` stores preferences; `runs.jsonl` stores local task summaries, failure summaries, working directories, token/tool usage, and cost. On first startup after upgrading from package-local storage, either legacy file is copied here if no destination file exists. Parent directories are created as needed and files use private permissions where supported. Package updates and uninstalling the extension do not wipe these files. Nothing in this extension uploads the history, but model providers still receive tasks executed with their models.
+Preferences and history live outside the installed package under `~/.pi/agent/pi-subagents/` (or the configured Pi agent directory). `state.json` stores preferences; `runs.jsonl` stores local task summaries, failure summaries, working directories, token/tool usage, and cost. Cost values are provider-reported estimates, not billing records. On first startup after upgrading from package-local storage, either legacy file is copied here if no destination file exists. Parent directories are created as needed and files use private permissions where supported. Package updates and uninstalling the extension do not wipe these files. Nothing in this extension uploads the history, but model providers still receive tasks executed with their models.
 
 Use `/agents history off` to stop new history while retaining existing entries, or `/agents history clear` to delete only `runs.jsonl`. To remove all extension data after uninstalling, delete the `pi-subagents` data directory manually.
 

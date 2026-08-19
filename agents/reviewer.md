@@ -1,6 +1,6 @@
 ---
 name: reviewer
-displayName: Mr. Ehrmantraut
+auto: true
 description: "Use before declaring a logic-bearing code change done or committing. Statically reviews the current diff for correctness bugs, regressions, missed edge cases, and broken assumptions. Skip only changes that cannot alter executable behavior, data or API contracts, generated/build output, or user-visible results; a small diff is not automatically trivial. Read-only; returns review coverage, P0-P3 findings, and approve/fix verdict. NOT for fixing code (worker/debugger), root-causing a known failing test/crash (debugger)."
 thinking: low
 tools: [read, grep, find, ls, git-inspect]

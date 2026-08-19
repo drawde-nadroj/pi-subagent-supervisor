@@ -1,8 +1,9 @@
 ---
 name: test-writer
-displayName: Ms. Dillmore
+auto: true
 description: "Use when tests are the primary deliverable, the user explicitly asks for tests, a TDD-first flow needs an expected failing test before implementation, or an implementation/debugging coordinator requests one focused post-fix regression test. Writes/extends focused automated tests for a named target and proves the named tests ran. NOT for routine post-change suite-running, broad automatic coverage, production implementation, or diagnosing unexpected failures (debugger)."
 thinking: low
+tools: [read, bash, edit, write]
 color: blue
 conventions: true
 spawn: [debugger]

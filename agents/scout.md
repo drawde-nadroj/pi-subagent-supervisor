@@ -1,6 +1,6 @@
 ---
 name: scout
-displayName: Yuumi
+auto: true
 description: "Use for broad read-only codebase reconnaissance when you cannot name the file/symbol up front or tracing the answer crosses several unfamiliar files. If the main agent can answer with one or two targeted greps/reads, do not use. Debugger may use Scout for bounded factual tracing, never diagnosis. Returns a concise factual answer plus structured file:line findings and unresolved gaps. NOT for planning (planner), editing (worker), review (reviewer), or diagnosing/root-causing a known failure (debugger)."
 thinking: low
 readonly: true
