@@ -282,7 +282,7 @@ export function routingPass(assertionsPass: boolean, timedOut: boolean, exitCode
 
 function runOne(c: RoutingEvalCase, repoDir: string, workDir: string): RoutingEvalResult {
 	const started = Date.now();
-	const proc = spawnSync("pi", ["-p", "-e", path.join(repoDir, "index.ts"), "--no-extensions", "--no-session", c.prompt], {
+	const proc = spawnSync("pi", ["-p", "-e", path.join(repoDir, "src", "index.ts"), "--no-extensions", "--no-session", c.prompt], {
 		cwd: workDir,
 		encoding: "utf-8",
 		env: { ...process.env, SUBAGENT_ROUTING_EVAL: "1" },
@@ -324,11 +324,11 @@ function runOneWithRetry(c: RoutingEvalCase, repoDir: string): RoutingEvalResult
 }
 
 function main(): void {
-	const cwd = path.dirname(fileURLToPath(import.meta.url));
+	const repoDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 	const args = new Set(process.argv.slice(2));
-	const baselinePath = path.join(cwd, "routing-eval-baseline.json");
+	const baselinePath = path.join(repoDir, "test", "routing-eval-baseline.json");
 	const outputArg = process.argv.includes("--output") ? process.argv[process.argv.indexOf("--output") + 1] : "";
-	const outputPath = outputArg ? path.resolve(cwd, outputArg) : "";
+	const outputPath = outputArg ? path.resolve(repoDir, outputArg) : "";
 	const selected = process.argv.includes("--case")
 		? new Set([process.argv[process.argv.indexOf("--case") + 1]])
 		: args.has("--fast")
@@ -343,7 +343,7 @@ function main(): void {
 
 	const results: RoutingEvalResult[] = [];
 	for (const c of cases) {
-		const r = runOneWithRetry(c, cwd);
+		const r = runOneWithRetry(c, repoDir);
 		results.push(r);
 		const status = r.pass ? "PASS" : "FAIL";
 		const flags = `${r.timedOut ? " [timeout]" : ""}${r.retried ? " [retried]" : ""}`;
@@ -351,7 +351,7 @@ function main(): void {
 	}
 	const report = {
 		generatedAt: new Date().toISOString(),
-		command: "pi -p -e index.ts --no-extensions --no-session <prompt>",
+		command: "pi -p -e src/index.ts --no-extensions --no-session <prompt>",
 		results,
 		summary: {
 			total: results.length,

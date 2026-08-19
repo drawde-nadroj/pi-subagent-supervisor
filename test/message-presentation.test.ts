@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { emptyUsage } from "./engine.ts";
-import { presentMessageIdentity, terminalOutputSummary } from "./message-presentation.ts";
-import type { CallSnapshot, RunNodeSnapshot } from "./registry.ts";
+import { emptyUsage } from "../src/engine.ts";
+import { presentMessageIdentity, terminalOutputSummary } from "../src/message-presentation.ts";
+import type { CallSnapshot, RunNodeSnapshot } from "../src/registry.ts";
 
 assert.deepEqual(
 	presentMessageIdentity({ role: "worker", persona: { base: "Ada", friendDepth: 1 } }),

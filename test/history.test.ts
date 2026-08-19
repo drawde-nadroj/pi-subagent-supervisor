@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { executeHistoryCommand, parseHistoryCommand, type HistoryPreference } from "./history.ts";
+import { executeHistoryCommand, parseHistoryCommand, type HistoryPreference } from "../src/history.ts";
 
 assert.equal(parseHistoryCommand("stats"), undefined);
 assert.equal(parseHistoryCommand("history"), "invalid");

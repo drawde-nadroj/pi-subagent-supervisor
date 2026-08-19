@@ -25,22 +25,23 @@
     "ai-agents"
   ],
   "files": [
-    "*.ts",
-    "!*.test.ts",
-    "!routing-eval.ts",
+    "src",
     "agents",
     "README.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
     "LICENSE"
   ],
   "pi": {
     "extensions": [
-      "./index.ts"
+      "./src/index.ts"
     ]
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test-concurrency=1 --test *.test.ts",
-    "test:routing": "node --experimental-strip-types routing-eval.ts",
-    "test:routing:fast": "node --experimental-strip-types routing-eval.ts --fast"
+    "test": "node --experimental-strip-types --test-concurrency=1 --test test/*.test.ts",
+    "test:routing": "node --experimental-strip-types test/routing-eval.ts",
+    "test:routing:fast": "node --experimental-strip-types test/routing-eval.ts --fast"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",

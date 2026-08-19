@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { buildActiveAgentsBlock, formatAgentBullet } from "./guidance.ts";
-import type { AgentConfig } from "./agents.ts";
+import { buildActiveAgentsBlock, formatAgentBullet } from "../src/guidance.ts";
+import type { AgentConfig } from "../src/agents.ts";
 
 const base: AgentConfig = {
 	name: "scout",

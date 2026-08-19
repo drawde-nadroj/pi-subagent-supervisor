@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { editorToolsValue } from "./dashboard-edit.ts";
+import { editorToolsValue } from "../src/dashboard-edit.ts";
 
 test("editor tool values preserve defaults, custom tools, and explicit no-tools", () => {
 	assert.equal(editorToolsValue("", false), undefined);

@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { CONFIG_DIR_NAME, getAgentDir, parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { fileURLToPath } from "node:url";
 
-const BUNDLED_AGENTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "agents");
+const BUNDLED_AGENTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "agents");
 
 export const READONLY_TOOLS = ["read", "grep", "find", "ls"];
 const EXPLICIT_READONLY_TOOLS = [...READONLY_TOOLS, "git-inspect"];

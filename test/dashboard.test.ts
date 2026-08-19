@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import type { AgentConfig } from "./agents.ts";
-import { countActiveExecutions, dashboardAgentIdentity, floorDashboardElapsed, openDashboard, startDashboardElapsedTimer } from "./dashboard.ts";
+import type { AgentConfig } from "../src/agents.ts";
+import { countActiveExecutions, dashboardAgentIdentity, floorDashboardElapsed, openDashboard, startDashboardElapsedTimer } from "../src/dashboard.ts";
 
 const agent = (name: string): AgentConfig => ({
 	name,

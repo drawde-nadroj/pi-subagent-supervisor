@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {
 	appendDebuggerNudge,
 	isTestOrBuildCommand,
-} from "./backstops.ts";
+} from "../src/backstops.ts";
 
 assert.equal(isTestOrBuildCommand("npm test"), true);
 assert.equal(isTestOrBuildCommand("pnpm run build"), true);

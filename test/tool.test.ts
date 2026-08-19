@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AgentConfig } from "./agents.ts";
-import { emptyUsage, type RunEvent, type RunHandle, type RunResult } from "./engine.ts";
-import { terminalOutputSummary } from "./message-presentation.ts";
-import { RESULT_CAP_BYTES, RESULT_TRUNCATION_MARKER, RunRegistry, type CallSnapshot } from "./registry.ts";
-import { detailsFromSnapshot, dispatchParallel, dispatchSequence, dispatchSingle, formatParallelResult, registerSubagentTool, type DispatchDeps } from "./tool.ts";
+import type { AgentConfig } from "../src/agents.ts";
+import { emptyUsage, type RunEvent, type RunHandle, type RunResult } from "../src/engine.ts";
+import { terminalOutputSummary } from "../src/message-presentation.ts";
+import { RESULT_CAP_BYTES, RESULT_TRUNCATION_MARKER, RunRegistry, type CallSnapshot } from "../src/registry.ts";
+import { detailsFromSnapshot, dispatchParallel, dispatchSequence, dispatchSingle, formatParallelResult, registerSubagentTool, type DispatchDeps } from "../src/tool.ts";
 
 assert.equal(formatParallelResult(["worker", "worker"], [
 	{ ok: false, finalText: "(no output)", usage: emptyUsage(), contextPercent: null, error: "aborted" },

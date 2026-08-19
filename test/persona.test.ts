@@ -5,7 +5,7 @@ import {
 	formatLiteralPersona,
 	formatPersona,
 	type PersonaDescriptor,
-} from "./persona.ts";
+} from "../src/persona.ts";
 
 const agent = (name: string, displayName?: string) => ({ name, displayName });
 

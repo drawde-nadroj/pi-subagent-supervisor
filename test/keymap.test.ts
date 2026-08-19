@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dataToKeyId, keyIdMatches } from "./keymap.ts";
+import { dataToKeyId, keyIdMatches } from "../src/keymap.ts";
 
 function label(data: string): string {
 	return JSON.stringify(data);

@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
-const LEGACY_DATA_DIR = path.dirname(fileURLToPath(import.meta.url));
+export const LEGACY_DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LEGACY_FILES = ["state.json", "runs.jsonl"] as const;
 
 export function getSubagentsDataDir(): string {

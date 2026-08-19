@@ -3,8 +3,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { createChildSession, createSpawnTool, emptyUsage, MAX_NESTED_PARALLEL, MAX_SPAWN_DEPTH, resolveAgentModel } from "./engine.ts";
-import type { AgentConfig } from "./agents.ts";
+import { createChildSession, createSpawnTool, emptyUsage, MAX_NESTED_PARALLEL, MAX_SPAWN_DEPTH, resolveAgentModel } from "../src/engine.ts";
+import type { AgentConfig } from "../src/agents.ts";
 
 const models = [
 	{ provider: "mock", id: "tiny-fast" },

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { buildReturnsInstruction, checkReturns, extractJsonBlock, formatReturnsJson, validateReturns, type ReturnsSchema } from "./returns.ts";
+import { buildReturnsInstruction, checkReturns, extractJsonBlock, formatReturnsJson, validateReturns, type ReturnsSchema } from "../src/returns.ts";
 
 const schema: ReturnsSchema = {
 	type: "object",

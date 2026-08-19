@@ -52,7 +52,7 @@ jobs:
 
           SOURCE_PACKAGE="$GITHUB_WORKSPACE/package.json" \
           INSTALLED_ROOT="$installed_root" \
-          ENTRYPOINT="$package_link/index.ts" \
+          ENTRYPOINT="$package_link/src/index.ts" \
             node --preserve-symlinks --experimental-strip-types --input-type=module <<'NODE'
           import assert from "node:assert/strict";
           import { access, readFile, realpath } from "node:fs/promises";
@@ -67,10 +67,10 @@ jobs:
 
           assert.equal(installedPackage.name, sourcePackage.name);
           assert.equal(installedPackage.version, sourcePackage.version);
-          assert.deepEqual(installedPackage.pi?.extensions, ["./index.ts"]);
+          assert.deepEqual(installedPackage.pi?.extensions, ["./src/index.ts"]);
 
           const entrypoint = process.env.ENTRYPOINT;
           await access(entrypoint);
-          assert.equal(await realpath(entrypoint), await realpath(path.join(installedRoot, "index.ts")));
+          assert.equal(await realpath(entrypoint), await realpath(path.join(installedRoot, "src", "index.ts")));
           await import(pathToFileURL(entrypoint).href);
           NODE

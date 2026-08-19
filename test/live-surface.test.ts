@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { Loader, visibleWidth } from "@earendil-works/pi-tui";
-import type { AgentConfig } from "./agents.ts";
-import { emptyUsage } from "./engine.ts";
-import { formatBackgroundCompletion, formatLiveIndicator, formatLiveSummary, formatLiveSurface, LiveSurfaceCoordinator, type LiveSurfaceUi, type TimerAdapter } from "./live-surface.ts";
-import { createPersona, createRootPersonas } from "./persona.ts";
-import { RunRegistry } from "./registry.ts";
+import type { AgentConfig } from "../src/agents.ts";
+import { emptyUsage } from "../src/engine.ts";
+import { formatBackgroundCompletion, formatLiveIndicator, formatLiveSummary, formatLiveSurface, LiveSurfaceCoordinator, type LiveSurfaceUi, type TimerAdapter } from "../src/live-surface.ts";
+import { createPersona, createRootPersonas } from "../src/persona.ts";
+import { RunRegistry } from "../src/registry.ts";
 
 const plain = (text: string | undefined): string | undefined => text?.replace(/\x1b\[[0-9:;]*m/g, "");
 

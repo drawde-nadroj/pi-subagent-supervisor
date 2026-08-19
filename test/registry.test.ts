@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import type { AgentConfig } from "./agents.ts";
-import { emptyUsage } from "./engine.ts";
-import { createNestedPersona, createPersona } from "./persona.ts";
-import { capResult, RESULT_CAP_BYTES, RESULT_TRUNCATION_MARKER, RunRegistry } from "./registry.ts";
-import { entryFromRecord } from "./runlog.ts";
+import type { AgentConfig } from "../src/agents.ts";
+import { emptyUsage } from "../src/engine.ts";
+import { createNestedPersona, createPersona } from "../src/persona.ts";
+import { capResult, RESULT_CAP_BYTES, RESULT_TRUNCATION_MARKER, RunRegistry } from "../src/registry.ts";
+import { entryFromRecord } from "../src/runlog.ts";
 
 const agent = (name: string, color: string): AgentConfig =>
 	({

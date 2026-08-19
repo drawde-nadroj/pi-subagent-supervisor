@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TwoPressConfirmation } from "./two-press-confirmation.ts";
+import { TwoPressConfirmation } from "../src/two-press-confirmation.ts";
 
 function create() {
 	return new TwoPressConfirmation({

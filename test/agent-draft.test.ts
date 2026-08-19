@@ -3,8 +3,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createAgentDraft, draftFromAgent, draftToWritable, parseCustomReturns, RETURNS_PRESETS, validateAgentDraft, validateReturnsSchema } from "./agent-draft.ts";
-import { parseAgentFile } from "./agents.ts";
+import { createAgentDraft, draftFromAgent, draftToWritable, parseCustomReturns, RETURNS_PRESETS, validateAgentDraft, validateReturnsSchema } from "../src/agent-draft.ts";
+import { parseAgentFile } from "../src/agents.ts";
 
 test("draft defaults and conversion cover writable fields without shared arrays", () => {
 	const a = createAgentDraft(), b = createAgentDraft(); a.fallback.push("backup");
@@ -27,7 +27,7 @@ test("returns schema validation is recursive and strict", () => {
 test("Findings and Review presets exactly match their bundled agent contracts", () => {
 	assert.deepEqual(RETURNS_PRESETS.map((x) => x.name), ["Findings", "Review", "Decision"]);
 	for (const preset of RETURNS_PRESETS) assert.deepEqual(validateReturnsSchema(preset.schema), []);
-	const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), "agents");
+	const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "agents");
 	for (const [presetName, agentName] of [["Findings", "scout"], ["Review", "reviewer"]] as const) {
 		const file = path.join(dir, `${agentName}.md`);
 		const parsed = parseAgentFile(fs.readFileSync(file, "utf8"), file, "bundled");

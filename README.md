@@ -116,7 +116,7 @@ Dashboard keys are remappable. The new-agent workbench stages Identity, Routing,
 
 ```sh
 npm test
-pi -p -e ./index.ts --no-extensions --no-session "List the available subagents."
+pi -p -e ./src/index.ts --no-extensions --no-session "List the available subagents."
 npm pack --dry-run
 ```
 
@@ -125,7 +125,7 @@ npm pack --dry-run
 ## Release checklist
 
 1. Run `npm test` and a headless load/discovery smoke test.
-2. Run `npm pack --dry-run`; verify only runtime TypeScript, bundled agents, README, and LICENSE are included.
+2. Run `npm pack --dry-run`; verify only `src/`, bundled agents, and public documents are included.
 3. Review package metadata and version, then inspect the final diff.
 4. Run paid routing evaluation only when explicitly intended.
 

@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { emptyUsage } from "./engine.ts";
-import { RunRegistry } from "./registry.ts";
-import { registerSubagentTool } from "./tool.ts";
+import { emptyUsage } from "../src/engine.ts";
+import { RunRegistry } from "../src/registry.ts";
+import { registerSubagentTool } from "../src/tool.ts";
 
 const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-manual-routing-"));
 const agentDir = path.join(cwd, ".pi", "agents");

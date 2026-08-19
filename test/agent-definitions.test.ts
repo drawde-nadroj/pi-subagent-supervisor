@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseAgentFile, resolveChildToolNames } from "./agents.ts";
+import { parseAgentFile, resolveChildToolNames } from "../src/agents.ts";
 
-const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), "agents");
+const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "agents");
 const source = (name: string) => fs.readFileSync(path.join(dir, `${name}.md`), "utf8");
 const load = (name: string) => {
 	const file = path.join(dir, `${name}.md`);

@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { migrateLegacyStorage } from "./storage.ts";
+import { fileURLToPath } from "node:url";
+import { LEGACY_DATA_DIR, migrateLegacyStorage } from "../src/storage.ts";
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+assert.equal(LEGACY_DATA_DIR, packageRoot, "default legacy storage remains at package root after the src/ move");
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "subagents-storage-"));
 try {

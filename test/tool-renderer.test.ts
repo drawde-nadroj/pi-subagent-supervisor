@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { emptyUsage } from "./engine.ts";
-import { formatLiveSurface } from "./live-surface.ts";
-import type { CallSnapshot, RunNodeSnapshot, RunNodeStatus } from "./registry.ts";
-import { activityForRole, formatAgentIdentityLine } from "./tree-presentation.ts";
+import { emptyUsage } from "../src/engine.ts";
+import { formatLiveSurface } from "../src/live-surface.ts";
+import type { CallSnapshot, RunNodeSnapshot, RunNodeStatus } from "../src/registry.ts";
+import { activityForRole, formatAgentIdentityLine } from "../src/tree-presentation.ts";
 import {
 	normalizeV2Details,
 	renderSubagentCall,
@@ -12,7 +12,7 @@ import {
 	type SubagentRendererState,
 	type SubagentRendererTheme,
 	type SubagentToolDetailsV2,
-} from "./tool-renderer.ts";
+} from "../src/tool-renderer.ts";
 
 const theme: SubagentRendererTheme = { fg: (_color, text) => text, bold: (text) => text };
 assert.deepEqual(

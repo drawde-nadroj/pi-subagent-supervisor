@@ -3,8 +3,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import test from "node:test";
-import { agentMutationRefusal, deleteAgentFile, materializeUserOverride, renameUserAgentFile, updateAgentFile, writeAgentFile } from "./agent-writer.ts";
-import { clearDiscoverCache, discoverAgents, type AgentConfig } from "./agents.ts";
+import { agentMutationRefusal, deleteAgentFile, materializeUserOverride, renameUserAgentFile, updateAgentFile, writeAgentFile } from "../src/agent-writer.ts";
+import { clearDiscoverCache, discoverAgents, type AgentConfig } from "../src/agents.ts";
 
 function definition(name: string, description = name): string {
 	return `---\nname: ${name}\ndescription: ${description}\n---\n\nPrompt\n`;

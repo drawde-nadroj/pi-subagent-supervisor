@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { agentDisplayName, parseAgentFile, READONLY_TOOLS, resolveChildToolNames } from "./agents.ts";
-import { serializeAgent } from "./agent-writer.ts";
+import { agentDisplayName, parseAgentFile, READONLY_TOOLS, resolveChildToolNames } from "../src/agents.ts";
+import { serializeAgent } from "../src/agent-writer.ts";
 
 const parsed = parseAgentFile(
 	`---

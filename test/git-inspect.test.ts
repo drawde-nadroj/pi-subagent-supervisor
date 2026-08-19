@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { gitInspectToolForAgent, inspectGitRepository } from "./git-inspect.ts";
+import { gitInspectToolForAgent, inspectGitRepository } from "../src/git-inspect.ts";
 
 const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "git-inspect-"));
 try {

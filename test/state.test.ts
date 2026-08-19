@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { getDefaultStatePath, SubagentState } from "./state.ts";
+import { getDefaultStatePath, SubagentState } from "../src/state.ts";
 
 const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "subagent-state-")), "state.json");
 fs.writeFileSync(file, JSON.stringify({ keybinds: { edit: "e" }, structuredReturns: false }), "utf8");

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
-import { serializeAgent } from "./agent-writer.ts";
-import { applyCustomToolSelection, createAgentDraft, draftFromAgent, draftToWritable, parseCustomReturns } from "./agent-draft.ts";
-import { TwoPressConfirmation } from "./two-press-confirmation.ts";
-import { acceptProvisionalSuggestion, advanceWorkbench, moveWorkbench, renderWorkbench, retreatWorkbench, reviewPreview, scopedModelNames, wizardModelNames, WORKBENCH_STAGES } from "./wizard.ts";
+import { serializeAgent } from "../src/agent-writer.ts";
+import { applyCustomToolSelection, createAgentDraft, draftFromAgent, draftToWritable, parseCustomReturns } from "../src/agent-draft.ts";
+import { TwoPressConfirmation } from "../src/two-press-confirmation.ts";
+import { acceptProvisionalSuggestion, advanceWorkbench, moveWorkbench, renderWorkbench, retreatWorkbench, reviewPreview, scopedModelNames, wizardModelNames, WORKBENCH_STAGES } from "../src/wizard.ts";
 
 test("workbench stages, navigation, and cancellation semantics are stable", () => {
 	assert.deepEqual(WORKBENCH_STAGES, ["Identity", "Routing", "Capabilities", "Instructions", "Output", "Review"]);

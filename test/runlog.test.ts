@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { aggregateRunStats, appendRunLog, appendRunLogIfEnabled, clearRunLog, entryFromRecord, failureCategory, filterRecentEntries, formatRunStats, getDefaultRunLogPath, readRunLog, type RunLogEntry } from "./runlog.ts";
-import { RunRegistry } from "./registry.ts";
-import { createPersona } from "./persona.ts";
-import { emptyUsage } from "./engine.ts";
-import type { AgentConfig } from "./agents.ts";
+import { aggregateRunStats, appendRunLog, appendRunLogIfEnabled, clearRunLog, entryFromRecord, failureCategory, filterRecentEntries, formatRunStats, getDefaultRunLogPath, readRunLog, type RunLogEntry } from "../src/runlog.ts";
+import { RunRegistry } from "../src/registry.ts";
+import { createPersona } from "../src/persona.ts";
+import { emptyUsage } from "../src/engine.ts";
+import type { AgentConfig } from "../src/agents.ts";
 
 const entry = (over: Partial<RunLogEntry>): RunLogEntry => ({
 	ts: "2026-07-02T00:00:00.000Z",
