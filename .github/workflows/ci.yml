@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["22.19.0", "26.x"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Check package contents
+        run: npm pack --dry-run
+
+      - name: Prove packed install
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package_tarball="$RUNNER_TEMP/$(npm pack --pack-destination "$RUNNER_TEMP")"
+          install_dir="$RUNNER_TEMP/pi-subagent-supervisor-packed-install"
+          mkdir -p "$install_dir"
+          printf '%s\n' '{"private":true}' > "$install_dir/package.json"
+          npm install --prefix "$install_dir" "$package_tarball"
+
+          installed_root="$install_dir/node_modules/pi-subagent-supervisor"
+          package_link="$install_dir/installed-package"
+          ln -s "$installed_root" "$package_link"
+
+          SOURCE_PACKAGE="$GITHUB_WORKSPACE/package.json" \
+          INSTALLED_ROOT="$installed_root" \
+          ENTRYPOINT="$package_link/index.ts" \
+            node --preserve-symlinks --experimental-strip-types --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { access, readFile, realpath } from "node:fs/promises";
+          import path from "node:path";
+          import { pathToFileURL } from "node:url";
+
+          const sourcePackage = JSON.parse(await readFile(process.env.SOURCE_PACKAGE, "utf8"));
+          const installedRoot = process.env.INSTALLED_ROOT;
+          const installedPackage = JSON.parse(
+            await readFile(path.join(installedRoot, "package.json"), "utf8"),
+          );
+
+          assert.equal(installedPackage.name, sourcePackage.name);
+          assert.equal(installedPackage.version, sourcePackage.version);
+          assert.deepEqual(installedPackage.pi?.extensions, ["./index.ts"]);
+
+          const entrypoint = process.env.ENTRYPOINT;
+          await access(entrypoint);
+          assert.equal(await realpath(entrypoint), await realpath(path.join(installedRoot, "index.ts")));
+          await import(pathToFileURL(entrypoint).href);
+          NODE

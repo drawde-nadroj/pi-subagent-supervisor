@@ -25,7 +25,14 @@ interface OutputDetails extends StoredMessageIdentity {
 }
 
 class CompactTaskLine implements Component {
-	constructor(private readonly text: string, private readonly dim: (text: string) => string) {}
+	private readonly text: string;
+	private readonly dim: (text: string) => string;
+
+	constructor(text: string, dim: (text: string) => string) {
+		this.text = text;
+		this.dim = dim;
+	}
+
 	render(width: number): string[] {
 		return [truncateToWidth(this.dim(`  ${this.text.replace(/\s+/g, " ").trim()}`), Math.max(1, width))];
 	}
