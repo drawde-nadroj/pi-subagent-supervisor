@@ -1,9 +1,8 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { type AgentConfig, clearDiscoverCache, discoverAgents } from "./agents.ts";
-import { deleteAgentFile, materializeUserOverride, serializeAgent, writeAgentFile } from "./agent-writer.ts";
+import { type AgentConfig, discoverAgents } from "./agents.ts";
+import { agentMutationRefusal, materializeUserOverride, renameUserAgentFile, updateAgentFile } from "./agent-writer.ts";
 import { COLOR_HEX, colorize } from "./colors.ts";
 import { pickMulti, pickTools } from "./pickers.ts";
 import type { ReturnsSchema } from "./returns.ts";
@@ -191,6 +190,11 @@ function parseReturnsDraft(raw: string): { schema?: ReturnsSchema } | { error: s
 }
 
 export async function openEditor(ctx: ExtensionContext, agent: AgentConfig): Promise<{ oldName: string; newName: string } | undefined> {
+	const refusal = agentMutationRefusal(agent, "edit");
+	if (refusal) {
+		ctx.ui.notify(refusal, "warning");
+		return undefined;
+	}
 	const bundledIdentity = agent.source === "bundled";
 	if (bundledIdentity) ctx.ui.notify(`Changes to ${agent.name} will be saved as a user override; the bundled default is unchanged.`, "info");
 	const avail = ctx.modelRegistry.getAvailable?.() ?? ctx.modelRegistry.getAll();
@@ -255,17 +259,20 @@ export async function openEditor(ctx: ExtensionContext, agent: AgentConfig): Pro
 				systemPrompt: r.draft.systemPrompt,
 			};
 			if (newName !== agent.name) {
-				const dir = path.dirname(agent.filePath);
-				const newPath = writeAgentFile(updated, dir);
-				if (newPath !== agent.filePath) deleteAgentFile(agent.filePath);
-				ctx.ui.notify(`Renamed ${agent.name} → ${newName}. Run /reload for /${path.basename(newPath, ".md")}.`, "info");
-				return { oldName: agent.name, newName };
+				try {
+					const newPath = renameUserAgentFile(updated);
+					ctx.ui.notify(`Renamed ${agent.name} → ${newName}. Run /reload for /${path.basename(newPath, ".md")}.`, "info");
+					return { oldName: agent.name, newName };
+				} catch (error) {
+					const message = (error as NodeJS.ErrnoException).code === "EEXIST" ? "That role name already has a user definition." : "Could not rename this role.";
+					ctx.ui.notify(message, "error");
+					focus = BASIC_FIELDS.indexOf("name");
+					page = "basic";
+					continue;
+				}
 			} else {
 				if (bundledIdentity) materializeUserOverride(updated);
-				else {
-					fs.writeFileSync(agent.filePath, serializeAgent(updated), "utf-8");
-					clearDiscoverCache();
-				}
+				else updateAgentFile(updated);
 				ctx.ui.notify(`Saved ${agent.name}${bundledIdentity ? " as a user override" : ""}`, "info");
 			}
 			return undefined;

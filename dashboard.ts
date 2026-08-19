@@ -1,10 +1,9 @@
 import { spawn } from "node:child_process";
-import * as fs from "node:fs";
 import * as os from "node:os";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { agentDisplayName, type AgentConfig, clearDiscoverCache, discoverAgents, resolveChildToolNames } from "./agents.ts";
-import { deleteAgentFile, materializeUserOverride, serializeAgent } from "./agent-writer.ts";
+import { agentDisplayName, type AgentConfig, discoverAgents, resolveChildToolNames } from "./agents.ts";
+import { agentMutationRefusal, deleteAgentFile, materializeUserOverride, updateAgentFile } from "./agent-writer.ts";
 import { colorDot, colorize } from "./colors.ts";
 import { openEditor } from "./dashboard-edit.ts";
 import { newAgentWizard } from "./wizard.ts";
@@ -218,10 +217,19 @@ async function showDashboard(
 				} else if (km.matches("settings", data)) finish({ kind: "settings" });
 				else if (km.matches("new", data)) finish({ kind: "newAgent" });
 				else if (km.matches("toggle", data) && agent) {
-					localAuto.set(agent.name, !(localAuto.get(agent.name) ?? agent.auto));
+					const refusal = agentMutationRefusal(agent, "toggle");
+					if (refusal) ctx.ui.notify(refusal, "warning");
+					else localAuto.set(agent.name, !(localAuto.get(agent.name) ?? agent.auto));
 					refresh();
-				} else if (km.matches("edit", data) && agent) finish({ kind: "editAgent", agent });
-				else if (km.matches("delete", data) && agent) finish({ kind: "deleteAgent", agent });
+				} else if (km.matches("edit", data) && agent) {
+					const refusal = agentMutationRefusal(agent, "edit");
+					if (refusal) ctx.ui.notify(refusal, "warning");
+					else finish({ kind: "editAgent", agent });
+				} else if (km.matches("delete", data) && agent) {
+					const refusal = agentMutationRefusal(agent, "delete");
+					if (refusal) ctx.ui.notify(refusal, "warning");
+					else finish({ kind: "deleteAgent", agent });
+				}
 				else if (km.matches("open", data) && agent?.filePath) {
 					openInOS(agent.filePath);
 					ctx.ui.notify(`Opening ${agent.filePath}`, "info");
@@ -371,13 +379,13 @@ export async function openDashboard(ctx: ExtensionContext, env: DashboardEnv): P
 				if (next === undefined || next === agent.auto) continue;
 				try {
 					if (agent.source === "bundled") materializeUserOverride({ ...agent, auto: next });
-					else fs.writeFileSync(agent.filePath, serializeAgent({ ...agent, auto: next }), "utf-8");
+					else if (agent.source === "user") updateAgentFile({ ...agent, auto: next });
+					else throw new Error("Project agent definitions are read-only");
 					changes++;
 				} catch {
 					ctx.ui.notify(`Could not save ${agent.name}`, "error");
 				}
 			}
-			if (changes) clearDiscoverCache();
 			ctx.ui.notify(changes ? `Applied ${changes} staged auto-routing change${changes === 1 ? "" : "s"}.` : "No staged auto-routing changes.", "info");
 			return;
 		}
@@ -394,14 +402,15 @@ export async function openDashboard(ctx: ExtensionContext, env: DashboardEnv): P
 		} else if (exit.kind === "settings") {
 			await showPreferences(ctx, env.km, env.state);
 		} else if (exit.kind === "deleteAgent") {
-			if (exit.agent.source === "bundled") {
-				ctx.ui.notify("Bundled roles cannot be deleted. Create a user override to customize one.", "warning");
+			const refusal = agentMutationRefusal(exit.agent, "delete");
+			if (refusal) {
+				ctx.ui.notify(refusal, "warning");
 				continue;
 			}
 			const position = agents.findIndex((agent) => agent.name === exit.agent.name);
 			const ok = await ctx.ui.confirm("Delete agent", `Delete ${exit.agent.name}?\nThis also removes ${exit.agent.filePath}`);
 			if (ok) {
-				deleteAgentFile(exit.agent.filePath);
+				deleteAgentFile(exit.agent);
 				auto.delete(exit.agent.name);
 				selected = agents[position + 1]?.name ?? agents[position - 1]?.name;
 				ctx.ui.notify(`Deleted ${exit.agent.name}.`, "info");

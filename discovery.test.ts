@@ -51,8 +51,8 @@ const collisionCopy = materializeUserOverride(bundledWorker!);
 assert.equal(fs.readFileSync(occupiedWorker, "utf-8"), occupiedBytes, "a different identity is never overwritten");
 assert.equal(collisionCopy.filePath, path.join(userAgentsDir, "worker-override.md"));
 assert.equal(fs.readFileSync(collisionCopy.filePath, "utf-8").includes("name: worker"), true);
-const secondCollisionCopy = materializeUserOverride(bundledWorker!);
-assert.equal(secondCollisionCopy.filePath, path.join(userAgentsDir, "worker-override-2.md"));
+assert.throws(() => materializeUserOverride(bundledWorker!), { code: "EEXIST" });
+assert.equal(fs.existsSync(path.join(userAgentsDir, "worker-override-2.md")), false);
 assert.equal(fs.readFileSync(occupiedWorker, "utf-8"), occupiedBytes);
 fs.rmSync(userAgentsDir, { recursive: true });
 

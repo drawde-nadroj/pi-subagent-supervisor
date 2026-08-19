@@ -161,21 +161,45 @@ export function resolveChildToolNames(agent: AgentConfig, includeSubagent = fals
 	return {}; // inherit pi defaults (read, bash, edit, write) + custom tools are enabled by default
 }
 
-function loadDir(dir: string, source: "bundled" | "user" | "project", translateClaudeTools = false): AgentConfig[] {
-	if (!fs.existsSync(dir)) return [];
-	let entries: fs.Dirent[];
+function sameFile(a: fs.Stats, b: fs.Stats): boolean {
+	return a.dev === b.dev && a.ino === b.ino;
+}
+
+function readRegularFile(filePath: string): string | null {
+	let fd: number | undefined;
 	try {
+		fd = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+		const opened = fs.fstatSync(fd);
+		const current = fs.lstatSync(filePath);
+		if (!opened.isFile() || !current.isFile() || !sameFile(opened, current)) return null;
+		return fs.readFileSync(fd, "utf-8");
+	} catch {
+		return null;
+	} finally {
+		if (fd !== undefined) fs.closeSync(fd);
+	}
+}
+
+function loadDir(dir: string, source: "bundled" | "user" | "project", translateClaudeTools = false): AgentConfig[] {
+	let entries: fs.Dirent[];
+	let directory: fs.Stats;
+	try {
+		directory = fs.lstatSync(dir);
+		if (!directory.isDirectory()) return [];
 		entries = fs.readdirSync(dir, { withFileTypes: true });
 	} catch {
 		return [];
 	}
 	const out: AgentConfig[] = [];
 	for (const e of entries) {
-		if (!e.name.endsWith(".md")) continue;
-		if (!e.isFile() && !e.isSymbolicLink()) continue;
+		if (!e.name.endsWith(".md") || !e.isFile()) continue;
 		const fp = path.join(dir, e.name);
 		try {
-			const cfg = parseAgentFile(fs.readFileSync(fp, "utf-8"), fp, source, translateClaudeTools);
+			if (!sameFile(directory, fs.lstatSync(dir))) return [];
+			const contents = readRegularFile(fp);
+			if (contents === null) continue;
+			if (!sameFile(directory, fs.lstatSync(dir))) return [];
+			const cfg = parseAgentFile(contents, fp, source, translateClaudeTools);
 			// Compatibility for copies of the formerly misnamed bundled definition.
 			// Keep this exact to the user-layer filename and legacy frontmatter value.
 			if (cfg && source === "user" && e.name === "test-writer.md" && cfg.name === "test writer") cfg.name = "test-writer";
@@ -192,7 +216,16 @@ function findProjectDir(cwd: string, ...segments: string[]): string | null {
 	while (true) {
 		const candidate = path.join(cur, ...segments);
 		try {
-			if (fs.statSync(candidate).isDirectory()) return candidate;
+			let component = cur;
+			let valid = true;
+			for (const segment of segments) {
+				component = path.join(component, segment);
+				if (fs.lstatSync(component).isSymbolicLink()) {
+					valid = false;
+					break;
+				}
+			}
+			if (valid && fs.lstatSync(candidate).isDirectory()) return candidate;
 		} catch {
 			/* ignore */
 		}
@@ -210,17 +243,17 @@ function dirFileSignature(dir: string | null): string {
 	if (!dir) return "";
 	let entries: fs.Dirent[];
 	try {
+		if (!fs.lstatSync(dir).isDirectory()) return "";
 		entries = fs.readdirSync(dir, { withFileTypes: true });
 	} catch {
 		return "";
 	}
 	const parts: string[] = [];
 	for (const e of entries) {
-		if (!e.name.endsWith(".md")) continue;
-		if (!e.isFile() && !e.isSymbolicLink()) continue;
+		if (!e.name.endsWith(".md") || !e.isFile()) continue;
 		try {
-			const st = fs.statSync(path.join(dir, e.name));
-			parts.push(`${e.name}:${st.mtimeMs}:${st.size}`);
+			const st = fs.lstatSync(path.join(dir, e.name));
+			if (st.isFile()) parts.push(`${e.name}:${st.mtimeMs}:${st.size}`);
 		} catch {
 			/* skip unreadable */
 		}
