@@ -132,7 +132,7 @@ export function parseAgentFile(
 		auto: asAuto(frontmatter.auto, frontmatter.advertise),
 		returns: frontmatter.returns && typeof frontmatter.returns === "object" && !Array.isArray(frontmatter.returns) ? (frontmatter.returns as import("./returns.ts").ReturnsSchema) : undefined,
 		thinking: frontmatter.thinking?.trim() || undefined,
-		tools: tools.length > 0 ? tools : undefined,
+		tools: Object.hasOwn(frontmatter, "tools") ? tools : undefined,
 		readonly: asBool(frontmatter.readonly),
 		color: frontmatter.color?.trim() || FALLBACK_COLORS[nameHash % FALLBACK_COLORS.length],
 		conventions: asBool(frontmatter.conventions ?? frontmatter.fork),
@@ -154,10 +154,10 @@ export function agentDisplayName(agent: Pick<AgentConfig, "name" | "displayName"
 export function resolveChildToolNames(agent: AgentConfig, includeSubagent = false): { tools?: string[]; noTools?: "all" | "builtin" } {
 	const withSubagent = (tools: string[]): string[] => (includeSubagent && !tools.includes("subagent") ? [...tools, "subagent"] : tools);
 	if (agent.readonly) {
-		const base = agent.tools && agent.tools.length > 0 ? agent.tools.filter((t) => EXPLICIT_READONLY_TOOLS.includes(t)) : READONLY_TOOLS;
+		const base = agent.tools === undefined ? READONLY_TOOLS : agent.tools.filter((t) => EXPLICIT_READONLY_TOOLS.includes(t));
 		return { tools: withSubagent(base) };
 	}
-	if (agent.tools && agent.tools.length > 0) return { tools: withSubagent(agent.tools) };
+	if (agent.tools !== undefined) return { tools: withSubagent(agent.tools) };
 	return {}; // inherit pi defaults (read, bash, edit, write) + custom tools are enabled by default
 }
 

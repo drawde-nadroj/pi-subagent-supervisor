@@ -110,7 +110,7 @@ Use `/agents history off` to stop new history while retaining existing entries, 
 
 ## Limitations
 
-Dashboard keys are remappable, but editor, wizard, and picker sub-overlays still use their fixed default navigation keys.
+Dashboard keys are remappable. The new-agent workbench stages Identity, Routing, Capabilities, Instructions, Output, and Review; it writes only after Review confirmation. Editor and picker sub-overlays still use their fixed default navigation keys.
 
 ## Development
 

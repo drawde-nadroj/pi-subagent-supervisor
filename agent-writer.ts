@@ -40,7 +40,7 @@ export function serializeAgent(a: WritableAgent): string {
 	if (a.model) lines.push(`model: ${yamlString(a.model)}`);
 	if (a.fallback && a.fallback.length > 0) lines.push(`fallback: [${a.fallback.map(yamlString).join(", ")}]`);
 	if (a.thinking) lines.push(`thinking: ${yamlString(a.thinking)}`);
-	if (a.tools && a.tools.length > 0) lines.push(`tools: [${a.tools.map(yamlString).join(", ")}]`);
+	if (a.tools !== undefined) lines.push(`tools: [${a.tools.map(yamlString).join(", ")}]`);
 	if (a.readonly) lines.push("readonly: true");
 	lines.push(`color: ${yamlString(a.color)}`);
 	if (a.conventions) lines.push("conventions: true");

@@ -82,9 +82,13 @@ export function formatReturnsJson(text: string): string {
 /** Minimal structural validation against the schema subset. Returns error strings ([] = valid). */
 export function validateReturns(schema: ReturnsSchema, value: unknown, path = "$"): string[] {
 	const errors: string[] = [];
-	if (schema.enum) {
-		if (!schema.enum.includes(value as string | number)) errors.push(`${path}: expected one of ${JSON.stringify(schema.enum)}, got ${JSON.stringify(value)}`);
+	const actualType = Array.isArray(value) ? "array" : value === null ? "null" : typeof value;
+	if (schema.type && actualType !== schema.type) {
+		errors.push(`${path}: expected ${schema.type}, got ${actualType}`);
 		return errors;
+	}
+	if (schema.enum && !schema.enum.includes(value as string | number)) {
+		errors.push(`${path}: expected one of ${JSON.stringify(schema.enum)}, got ${JSON.stringify(value)}`);
 	}
 	switch (schema.type) {
 		case "object": {

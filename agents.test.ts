@@ -186,6 +186,28 @@ assert.deepEqual(READONLY_TOOLS, ["read", "grep", "find", "ls"]);
 assert.deepEqual(resolveChildToolNames({ ...roundTrip, tools: undefined }), { tools: ["read", "grep", "find", "ls"] });
 assert.deepEqual(resolveChildToolNames({ ...roundTrip, tools: ["read", "git-inspect"] }), { tools: ["read", "git-inspect"] });
 
+// An explicit empty allowlist is different from an omitted allowlist and must
+// remain tool-less for both writable and read-only roles.
+const noTools = parseAgentFile(
+	`---
+name: no-tools
+description: No tools
+tools: []
+color: cyan
+---
+
+Answer without tools.
+`,
+	"/tmp/no-tools.md",
+	"user",
+);
+assert.ok(noTools);
+assert.deepEqual(noTools.tools, []);
+assert.deepEqual(resolveChildToolNames(noTools), { tools: [] });
+assert.deepEqual(resolveChildToolNames({ ...noTools, readonly: true }), { tools: [] });
+assert.deepEqual(resolveChildToolNames({ ...noTools, spawn: ["scout"] }, true), { tools: ["subagent"] });
+assert.match(serializeAgent(noTools), /^tools: \[\]$/m);
+
 // fallback models parse (incl. nicobailon alias) and round-trip.
 const fb = parseAgentFile(
 	`---

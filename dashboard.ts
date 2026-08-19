@@ -123,7 +123,7 @@ function activeByRole(snapshots: readonly CallSnapshot[]): Map<string, RunNodeSn
 
 function accessSummary(agent: AgentConfig): string[] {
 	const resolved = resolveChildToolNames(agent, agent.spawn.length > 0);
-	const tools = resolved.tools?.join(", ") ?? "Pi defaults";
+	const tools = resolved.tools === undefined ? "Pi defaults" : resolved.tools.length > 0 ? resolved.tools.join(", ") : "none";
 	return [
 		`Model: ${agent.model ?? "session model"}${agent.fallback.length ? ` · fallback ${agent.fallback.join(", ")}` : ""}`,
 		`Tools: ${tools}${agent.readonly ? " · read-only" : ""}`,

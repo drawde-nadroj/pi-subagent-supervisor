@@ -48,3 +48,6 @@ assert.match(checkReturns(schema, "just prose") ?? "", /missing the required tra
 assert.match(buildReturnsInstruction(schema), /"verdict"/);
 
 console.log("returns unit tests passed");
+
+assert.ok(validateReturns({ type: "string", enum: ["ok"] }, 1).some((error) => error.includes("expected string")));
+assert.ok(validateReturns({ type: "string", enum: ["ok"] }, "bad").some((error) => error.includes("expected one of")));

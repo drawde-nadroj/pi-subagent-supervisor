@@ -28,12 +28,19 @@ interface Draft {
 	conventions: boolean;
 	color: string;
 	tools: string;
+	/** Distinguishes omitted defaults from an explicit tools: [] no-tools boundary. */
+	toolsExplicit: boolean;
 	/** Comma-joined agent names this agent may delegate to. */
 	spawn: string;
 	/** Raw JSON of the returns schema ("" = none). Validated on save. */
 	returns: string;
 	description: string;
 	systemPrompt: string;
+}
+
+export function editorToolsValue(raw: string, explicit: boolean): string[] | undefined {
+	const tools = raw.split(",").map((value) => value.trim()).filter(Boolean);
+	return explicit ? tools : undefined;
 }
 
 type EditorExit =
@@ -153,7 +160,10 @@ function showEditorOverlay(ctx: ExtensionContext, agentName: string, draft: Draf
 				else if (f === "spawn") val = draft.spawn ? theme.fg("muted", draft.spawn) : theme.fg("dim", "(none — cannot delegate)");
 				else if (f === "returns") val = draft.returns.trim() ? theme.fg("muted", truncateToWidth(draft.returns.replace(/\s+/g, " "), Math.max(12, width - 20))) : theme.fg("dim", "(none)");
 				else if (f === "conventions") val = draft.conventions ? theme.fg("success", "on") : theme.fg("dim", "off");
-				else val = draft.tools ? theme.fg("muted", `${draft.readonly ? "read-only custom: " : "custom: "}${draft.tools}`) : draft.readonly ? theme.fg("success", "read-only defaults") : theme.fg("dim", "default");
+				else if (draft.toolsExplicit) val = draft.tools
+					? theme.fg("muted", `${draft.readonly ? "read-only custom: " : "custom: "}${draft.tools}`)
+					: theme.fg("warning", `${draft.readonly ? "read-only · " : ""}no tools`);
+				else val = draft.readonly ? theme.fg("success", "read-only defaults") : theme.fg("dim", "default");
 				add(`${foc ? theme.fg("accent", "> ") : "  "}${theme.fg(foc ? "accent" : "text", LABELS[f].padEnd(13))} ${val}`);
 				if (f === "color" && foc) {
 					const swatches = colors.map((c) => (c === draft.color ? `[${colorize(c, "●")}]` : ` ${colorize(c, "●")} `)).join("");
@@ -212,6 +222,7 @@ export async function openEditor(ctx: ExtensionContext, agent: AgentConfig): Pro
 		conventions: agent.conventions,
 		color: agent.color,
 		tools: agent.tools?.join(", ") ?? "",
+		toolsExplicit: agent.tools !== undefined,
 		spawn: agent.spawn.join(", "),
 		returns: agent.returns ? JSON.stringify(agent.returns, null, 2) : "",
 		description: agent.description,
@@ -239,7 +250,6 @@ export async function openEditor(ctx: ExtensionContext, agent: AgentConfig): Pro
 				page = "basic";
 				continue;
 			}
-			const tools = csv(r.draft.tools);
 			const updated: AgentConfig = {
 				...agent,
 				name: newName,
@@ -252,7 +262,7 @@ export async function openEditor(ctx: ExtensionContext, agent: AgentConfig): Pro
 				readonly: r.draft.readonly,
 				conventions: r.draft.conventions,
 				color: r.draft.color,
-				tools: tools.length ? tools : undefined,
+				tools: editorToolsValue(r.draft.tools, r.draft.toolsExplicit),
 				spawn: csv(r.draft.spawn),
 				returns: returnsResult.schema,
 				description: r.draft.description,
@@ -286,11 +296,12 @@ export async function openEditor(ctx: ExtensionContext, agent: AgentConfig): Pro
 			const v = await ctx.ui.input("Display name (optional human-facing name)", draft.displayName);
 			if (v !== undefined) draft.displayName = v;
 		} else if (r.field === "tools") {
-			const readonly = await ctx.ui.confirm("Tool access", "Restrict this agent to read-only tools?\nChoose No for default or custom full access.");
+			const readonly = await ctx.ui.confirm("Tool access", "Restrict this agent to read-only tools?\nConfirming an empty tool list means no tools.");
 			const picked = await pickTools(ctx, csv(draft.tools));
 			if (picked !== undefined) {
 				draft.readonly = readonly;
 				draft.tools = picked.join(", ");
+				draft.toolsExplicit = true;
 			}
 		} else if (r.field === "spawn") {
 			const picked = await pickMulti(ctx, "Spawn targets", roster.map((n) => ({ name: n })), csv(draft.spawn), "agents this one may itself delegate to");

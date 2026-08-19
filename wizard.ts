@@ -1,238 +1,339 @@
 import * as path from "node:path";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Editor, type EditorTheme, Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { writeAgentFile } from "./agent-writer.ts";
+import { getAgentDir, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { serializeAgent, writeAgentFile } from "./agent-writer.ts";
+import { applyCustomToolSelection, createAgentDraft, draftToWritable, parseCustomReturns, RETURNS_PRESETS, type AgentDraft, validateAgentDraft } from "./agent-draft.ts";
+import { discoverAgents } from "./agents.ts";
 import { runAgent } from "./engine.ts";
-import { pickColor } from "./pickers.ts";
+import { pickColor, pickMulti, pickTools } from "./pickers.ts";
+import { TwoPressConfirmation } from "./two-press-confirmation.ts";
 
-function editorTheme(theme: any): EditorTheme {
-	return {
-		borderColor: (s) => theme.fg("accent", s),
-		selectList: {
-			selectedPrefix: (t) => theme.fg("accent", t),
-			selectedText: (t) => theme.fg("accent", t),
-			description: (t) => theme.fg("muted", t),
-			scrollInfo: (t) => theme.fg("dim", t),
-			noMatch: (t) => theme.fg("warning", t),
-		},
-	};
-}
+export const WORKBENCH_STAGES = ["Identity", "Routing", "Capabilities", "Instructions", "Output", "Review"] as const;
+export type WorkbenchStage = typeof WORKBENCH_STAGES[number];
+export interface WorkbenchState { stage: number; selected: number }
+export type WorkbenchIntent = { action: "cancel" | "back" | "edit" | "suggest" | "save"; field?: string };
 
-interface Answers {
-	name: string;
-	displayName: string;
-	description: string;
-	systemPrompt: string;
-}
-
-interface Step {
-	key: keyof Answers;
-	question: string;
-	help?: string[];
-	suggest: boolean;
-	aiInstruction?: (a: Answers) => string;
-}
-
-const STEPS: Step[] = [
-	{ key: "name", question: "What do you want this subagent to be called?", suggest: false },
-	{ key: "displayName", question: "Optional: what human-facing display name should it use?", suggest: false },
-	{
-		key: "description",
-		question: "What's this agent for? When's it supposed to be called?",
-		suggest: true,
-		aiInstruction: (a) =>
-			`Write a single-line "when to delegate" description for a subagent named "${a.name}", using "use proactively"/"always use for" cues so a parent AI knows when to call it. Output only the line.`,
-	},
-	{
-		key: "systemPrompt",
-		question: "What's the system prompt that defines this agent's behavior?",
-		help: [
-			"Good prompts cover:",
-			"  Role   — What is the agent? (e.g. \"you are a fast reconnaissance agent\")",
-			"  Rules  — How should it behave? What tools can/can't it use?",
-			"  Output — How should it format its results?",
-		],
-		suggest: true,
-		aiInstruction: (a) =>
-			`Write a concise system prompt for a subagent named "${a.name}" described as: ${a.description}. Cover its role, a few clear rules (including tool use), and how it should format its final output. Output only the prompt.`,
-	},
+const STAGE_ROWS: readonly (readonly string[])[] = [
+	["name", "displayName", "color"],
+	["auto", "description"],
+	["access", "model", "fallback", "thinking", "conventions", "spawn"],
+	["systemPrompt"],
+	["output"],
+	["save"],
 ];
 
-/** Runs the multi-step new-agent overlay. Returns the answers, or null if cancelled. */
-function runWizardOverlay(ctx: ExtensionContext): Promise<Answers | null> {
-	return ctx.ui.custom<Answers | null>((tui: any, theme: any, _kb: any, done: (r: Answers | null) => void) => {
-		const answers: Answers = { name: "", displayName: "", description: "", systemPrompt: "" };
-		let step = 0;
-		let cached: string[] | undefined;
-		let thinking = false;
-		let aiAbort: AbortController | null = null;
-		let editor = new Editor(tui, editorTheme(theme));
+export function moveWorkbench(state: WorkbenchState, delta: number): WorkbenchState {
+	const count = STAGE_ROWS[state.stage].length;
+	return { ...state, selected: (state.selected + delta + count) % count };
+}
 
+export function advanceWorkbench(state: WorkbenchState): WorkbenchState {
+	return state.stage >= WORKBENCH_STAGES.length - 1 ? state : { stage: state.stage + 1, selected: 0 };
+}
+
+export function retreatWorkbench(state: WorkbenchState): WorkbenchState {
+	return state.stage === 0 ? state : { stage: state.stage - 1, selected: 0 };
+}
+
+/** Preserve registry order while removing duplicate provider/model entries. */
+export function scopedModelNames(models: readonly { provider: string; id: string }[]): string[] {
+	return [...new Set(models.map((model) => `${model.provider}/${model.id}`))];
+}
+
+export function wizardModelNames(ctx: Pick<ExtensionContext, "modelRegistry"> & { scopedModels?: readonly { model: { provider: string; id: string } }[] }): string[] {
+	const scoped = ctx.scopedModels?.map((entry) => entry.model) ?? [];
+	const available = scoped.length > 0 ? scoped : (ctx.modelRegistry.getAvailable?.() ?? ctx.modelRegistry.getAll());
+	return scopedModelNames(available);
+}
+
+/** A generated value is provisional until the editor explicitly returns a value. */
+export function acceptProvisionalSuggestion(current: string, edited: string | undefined): string {
+	return edited === undefined ? current : edited;
+}
+
+function outputName(draft: AgentDraft): string {
+	if (!draft.returns) return "None";
+	return RETURNS_PRESETS.find((preset) => JSON.stringify(preset.schema) === JSON.stringify(draft.returns))?.name ?? "Custom";
+}
+
+function rowValue(field: string, draft: AgentDraft): string {
+	if (field === "name") return draft.name || "(required)";
+	if (field === "displayName") return draft.displayName || "(none)";
+	if (field === "color") return draft.color;
+	if (field === "auto") return draft.auto ? "proactive" : "manual only";
+	if (field === "description") return draft.description || "(required)";
+	if (field === "access") {
+		if (draft.access === "unset") return "not selected";
+		return draft.toolMode === "custom" ? `${draft.access}, custom: ${draft.tools.join(", ") || "none"}` : draft.toolMode === "none" ? `${draft.access}, no tools` : `${draft.access}, default tools`;
+	}
+	if (field === "model") return draft.model || "inherited";
+	if (field === "fallback") return draft.fallback.join(" → ") || "none";
+	if (field === "thinking") return draft.thinking || "inherited";
+	if (field === "conventions") return draft.conventions ? "on" : "off";
+	if (field === "spawn") return draft.spawn.join(", ") || "none";
+	if (field === "systemPrompt") return draft.systemPrompt || "(required)";
+	if (field === "output") return outputName(draft);
+	return "Review and create";
+}
+
+export function reviewPreview(draft: AgentDraft, width: number): string[] {
+	const accessValid = (draft.access === "readonly" || draft.access === "writable")
+		&& (draft.toolMode === "defaults" || draft.toolMode === "none" || (draft.toolMode === "custom" && draft.tools.length > 0));
+	const writable = accessValid ? draftToWritable(draft) : undefined;
+	const permissions = draft.access === "unset"
+		? "unset"
+		: draft.toolMode === "custom"
+			? `${draft.access}, custom (${draft.tools.join(", ") || "no tools selected"})`
+			: draft.toolMode === "none" ? `${draft.access}, no tools` : `${draft.access}, default tools`;
+	const summaries = [
+		`Routing: ${draft.auto === false ? "manual" : "proactive"}; ${draft.description.trim()}`,
+		`Permissions: ${permissions}`,
+		`Model: ${draft.model.trim() || "inherited"}; fallback ${draft.fallback.join(" → ") || "none"}; thinking ${draft.thinking.trim() || "inherited"}`,
+		`Delegation: conventions ${draft.conventions ? "on" : "off"}; spawn ${draft.spawn.join(", ") || "none"}`,
+		`Output: ${outputName(draft)}`,
+		...(writable
+			? ["Serialized definition:", ...serializeAgent(writable).trimEnd().split("\n").map((line) => `  ${line}`)]
+			: ["Serialized definition unavailable until valid tool access is selected."]),
+	];
+	return summaries.flatMap((text) => wrapTextWithAnsi(text, Math.max(1, width)).map((line) => truncateToWidth(line, width)));
+}
+
+const FIELD_LABELS: Record<string, string> = {
+	name: "Name", displayName: "Display Name", color: "Color", auto: "Auto routing",
+	description: "Description", access: "Tool access", model: "Model", fallback: "Fallback",
+	thinking: "Thinking", conventions: "Conventions", spawn: "Spawn", systemPrompt: "System Prompt",
+	output: "Output", save: "Create",
+};
+
+export function renderWorkbench(draft: AgentDraft, state: WorkbenchState, width: number): string[] {
+	width = Math.max(1, width);
+	const lines = [
+		`Create a new subagent · ${WORKBENCH_STAGES[state.stage]}   ${state.stage + 1}/6`,
+		"b    back",
+		"esc  discard",
+		"⏎    edit / next",
+		"↑↓   select",
+		"",
+	];
+	if (state.stage === 5) lines.push(...reviewPreview(draft, width));
+	else {
+		STAGE_ROWS[state.stage].forEach((field, index) => lines.push(`${index === state.selected ? ">" : " "} ${FIELD_LABELS[field]}: ${rowValue(field, draft)}`));
+		const selected = STAGE_ROWS[state.stage][state.selected];
+		if (selected === "description" || selected === "systemPrompt") lines.push("", "Tab  Want a suggestion?");
+	}
+	return lines.map((line) => truncateToWidth(line, width));
+}
+
+function showStage(ctx: ExtensionContext, draft: AgentDraft, initial: WorkbenchState): Promise<{ intent: WorkbenchIntent; state: WorkbenchState }> {
+	return ctx.ui.custom((tui: any, theme: any, injected: any, done: (result: { intent: WorkbenchIntent; state: WorkbenchState }) => void) => {
+		let state = initial;
+		let cached: string[] | undefined;
+		let cachedWidth: number | undefined;
+		const keys = injected;
+		const confirmation = new TwoPressConfirmation({
+			isConfirm: (data) => keys.matches(data, "tui.select.confirm"),
+			// Escape always discards the draft; it is not a two-press action here.
+			isCancel: () => false,
+		});
 		const refresh = () => {
 			cached = undefined;
+			cachedWidth = undefined;
 			tui.requestRender();
 		};
-
-		function newEditor(prefill = "") {
-			editor = new Editor(tui, editorTheme(theme));
-			editor.setText(prefill);
-			editor.onSubmit = (value: string) => submit(value);
-		}
-		editor.onSubmit = (value: string) => submit(value);
-
-		function submit(value: string) {
-			if (thinking) return;
-			const s = STEPS[step];
-			const text = value.trim();
-			if (s.key === "name" && !text) return; // name required
-			answers[s.key] = value;
-			if (step >= STEPS.length - 1) {
-				done(answers);
-				return;
-			}
-			step += 1;
-			newEditor("");
-			refresh();
-		}
-
-		function startSuggestion() {
-			const s = STEPS[step];
-			if (!s.suggest || !s.aiInstruction || thinking) return;
-			thinking = true;
-			aiAbort = new AbortController();
-			refresh();
-			void (async () => {
-				try {
-					const handle = await runAgent({
-						agent: {
-							name: "drafter", description: "drafter", model: "deepseek-v4-pro", thinking: "high",
-							fallback: [], auto: true,
-							tools: undefined, readonly: true, color: "purple", conventions: false, spawn: [],
-							systemPrompt: "You draft a single piece of text exactly as instructed. Output ONLY the requested text — no preamble, no fences.",
-							source: "user", filePath: "",
-						},
-						task: s.aiInstruction!(answers),
-						parentModel: ctx.model,
-						registry: ctx.modelRegistry,
-						cwd: ctx.cwd,
-						conventions: false,
-						signal: aiAbort!.signal,
-						onEvent: () => {},
-					});
-					const r = await handle.promise;
-					if (!thinking) return; // cancelled
-					thinking = false;
-					aiAbort = null;
-					if (r.ok && r.finalText.trim()) newEditor(r.finalText.trim().replace(/^```[a-z]*\n/i, "").replace(/\n```$/i, "").trim());
-					refresh();
-				} catch {
-					thinking = false;
-					aiAbort = null;
-					refresh();
-				}
-			})();
-		}
-
-		function cancelSuggestion() {
-			if (!thinking) return;
-			thinking = false;
-			aiAbort?.abort();
-			aiAbort = null;
-			refresh();
-		}
-
 		function handleInput(data: string) {
-			if (thinking) {
-				if (matchesKey(data, Key.escape)) cancelSuggestion();
-				return;
+			if (state.stage === 5) {
+				const result = confirmation.handle(data);
+				if (result.kind === "commit") return done({ intent: { action: "save" }, state });
+				if (result.kind === "arm") { refresh(); return; }
+				if (result.kind === "disarm") refresh();
 			}
-			if (matchesKey(data, Key.escape)) {
-				if (step === 0) {
-					done(null);
-					return;
-				}
-				step -= 1;
-				newEditor(answers[STEPS[step].key]);
-				refresh();
-				return;
+			if (keys.matches(data, "tui.select.cancel")) return done({ intent: { action: "cancel" }, state });
+			if (data === "b") return done({ intent: { action: "back" }, state });
+			const selected = STAGE_ROWS[state.stage][state.selected];
+			if (keys.matches(data, "tui.input.tab") && (selected === "description" || selected === "systemPrompt")) {
+				return done({ intent: { action: "suggest", field: selected }, state });
 			}
-			if (STEPS[step].suggest && matchesKey(data, Key.tab)) {
-				startSuggestion();
-				return;
-			}
-			editor.handleInput(data);
-			refresh();
+			if (keys.matches(data, "tui.select.up")) { state = moveWorkbench(state, -1); refresh(); return; }
+			if (keys.matches(data, "tui.select.down")) { state = moveWorkbench(state, 1); refresh(); return; }
+			if (!keys.matches(data, "tui.select.confirm") || state.stage === 5) return;
+			done({ intent: { action: "edit", field: STAGE_ROWS[state.stage][state.selected] }, state });
 		}
-
-		function build(width: number): string[] {
-			const s = STEPS[step];
-			const lines: string[] = [];
-			const add = (t: string) => lines.push(truncateToWidth(t, width));
-			add(theme.fg("accent", "─".repeat(width)));
-			add(theme.fg("text", " Create a new subagent") + theme.fg("dim", `   step ${step + 1}/${STEPS.length}`));
-			lines.push("");
-			for (const w of wrapTextWithAnsi(theme.fg("text", s.question), width - 1)) add(` ${w}`);
-			if (s.help) for (const h of s.help) add(theme.fg("dim", ` ${h}`));
-			lines.push("");
-			// running summary of prior answers, each labelled by its field
-			const LABELS: Record<keyof Answers, string> = { name: "Name", displayName: "Display Name", description: "Description", systemPrompt: "System Prompt" };
-			for (let k = 0; k < step; k++) {
-				const key = STEPS[k].key;
-				if (answers[key]) {
-					const label = LABELS[key];
-					add(theme.fg("muted", ` ${label}: `) + theme.fg("dim", answers[key].replace(/\s+/g, " ").slice(0, Math.max(1, width - label.length - 4))));
-				}
-			}
-			lines.push("");
-			if (thinking) {
-				add(theme.fg("accent", " Thinking super duper hard...") + theme.fg("dim", "   (esc to cancel)"));
-			} else {
-				for (const l of editor.render(Math.max(1, width - 2))) add(` ${l}`);
-				lines.push("");
-				if (s.suggest) add(theme.fg("muted", " [Tab] ") + theme.fg("accent", "Want a suggestion?"));
-				add(theme.fg("dim", " ⏎ submit"));
-				add(theme.fg("dim", " esc " + (step === 0 ? "cancel" : "back")));
-			}
-			add(theme.fg("accent", "─".repeat(width)));
-			return lines;
-		}
-
 		return {
 			render(width: number) {
-				if (cached) return cached;
-				cached = build(width);
+				width = Math.max(1, width);
+				if (!cached || cachedWidth !== width) {
+					cachedWidth = width;
+					const body = renderWorkbench(draft, state, Math.max(1, width - 2));
+					cached = [
+						theme.fg(confirmation.borderColor(), "─".repeat(width)),
+						...body.map((line) => truncateToWidth(` ${line}`, width)),
+						theme.fg(confirmation.borderColor(), "─".repeat(width)),
+					];
+					if (state.stage === 5 && confirmation.armed === "confirm") cached.splice(-1, 0, truncateToWidth(theme.fg("success", " ⏎ again to create"), width));
+				}
 				return cached;
 			},
-			invalidate() {
-				cached = undefined;
-			},
+			invalidate() { cached = undefined; cachedWidth = undefined; },
 			handleInput,
 		};
 	});
 }
 
+async function draftSuggestion(ctx: ExtensionContext, draft: AgentDraft, field: "description" | "systemPrompt"): Promise<string | undefined> {
+	const task = field === "description"
+		? `Write a single-line "when to delegate" description for a subagent named "${draft.name}", using "use proactively"/"always use for" cues so a parent AI knows when to call it. Output only the line.`
+		: `Write a concise system prompt for a subagent named "${draft.name}" described as: ${draft.description}. Cover its role, a few clear rules (including tool use), and how it should format its final output. Output only the prompt.`;
+	return ctx.ui.custom<string | undefined>((tui: any, theme: any, injected: any, done: (value: string | undefined) => void) => {
+		const abort = new AbortController();
+		const keys = injected;
+		let closed = false;
+		void (async () => {
+			try {
+				const handle = await runAgent({
+					agent: { name: "drafter", description: "drafter", thinking: "high", fallback: [], auto: true, tools: undefined, readonly: true, color: "purple", conventions: false, spawn: [], systemPrompt: "You draft a single piece of text exactly as instructed. Output ONLY the requested text — no preamble, no fences.", source: "user", filePath: "" },
+					task, parentModel: ctx.model, registry: ctx.modelRegistry, cwd: ctx.cwd, conventions: false, signal: abort.signal, onEvent: () => {},
+				});
+				const result = await handle.promise;
+				if (!closed) done(result.ok ? result.finalText.trim().replace(/^```[a-z]*\n/i, "").replace(/\n```$/i, "").trim() : undefined);
+			} catch {
+				if (!closed) done(undefined);
+			}
+		})();
+		return {
+			render(width: number) { return [truncateToWidth(theme.fg("accent", "Thinking super duper hard…"), width), truncateToWidth(theme.fg("dim", "esc  cancel suggestion"), width)]; },
+			invalidate() {},
+			handleInput(data: string) { if (keys.matches(data, "tui.select.cancel")) { closed = true; abort.abort(); done(undefined); } },
+		};
+	});
+}
+
+async function applySuggestionFlow(ctx: ExtensionContext, draft: AgentDraft, field: "description" | "systemPrompt"): Promise<boolean> {
+	const current = draft[field];
+	const suggestion = await draftSuggestion(ctx, draft, field);
+	if (!suggestion) return false;
+	const edited = await ctx.ui.editor("Review suggestion — submit to accept, esc to keep the current value", suggestion);
+	if (edited === undefined) return false;
+	draft[field] = acceptProvisionalSuggestion(current, edited);
+	return true;
+}
+
+async function editField(ctx: ExtensionContext, draft: AgentDraft, field: string, models: string[], roster: string[]): Promise<boolean> {
+	if (field === "name" || field === "displayName") {
+		const value = await ctx.ui.input(field === "name" ? "Role / command identity" : "Display name (optional)", draft[field]);
+		if (value === undefined) return false;
+		draft[field] = value;
+	} else if (field === "color") {
+		const value = await pickColor(ctx, draft.color);
+		if (!value) return false;
+		draft.color = value;
+	} else if (field === "auto" || field === "conventions") {
+		draft[field] = !draft[field];
+	} else if (field === "description" || field === "systemPrompt") {
+		const current = draft[field];
+		const value = await ctx.ui.editor(`${field === "description" ? "When to delegate" : "Agent instructions"} — type /suggest here to use the original AI drafter`, current);
+		if (value === "/suggest") {
+			return applySuggestionFlow(ctx, draft, field);
+		} else {
+			if (value === undefined) return false;
+			draft[field] = value;
+		}
+	} else if (field === "access") {
+		const choice = await ctx.ui.select("Tool access", [
+			"read-only, default tools",
+			"read-only, custom tools",
+			"read-only, no tools",
+			"writable, Pi defaults",
+			"writable, custom tools",
+			"writable, no tools",
+		]);
+		if (choice === undefined) return false;
+		const access = choice.startsWith("read-only") ? "readonly" : "writable";
+		if (!choice.includes("custom")) {
+			draft.access = access;
+			draft.toolMode = choice.includes("no tools") ? "none" : "defaults";
+			draft.tools = [];
+		} else {
+			const selected = await pickTools(ctx, draft.tools);
+			if (selected === undefined) return false;
+			const result = applyCustomToolSelection(draft, selected, access);
+			if ("error" in result) { ctx.ui.notify(result.error, "error"); return false; }
+			draft.access = result.access;
+			draft.toolMode = result.toolMode;
+			draft.tools = result.tools;
+		}
+	} else if (field === "model") {
+		const choice = await ctx.ui.select("Model", ["inherited", ...models]);
+		if (choice === undefined) return false;
+		draft.model = choice === "inherited" ? "" : choice;
+	} else if (field === "fallback") {
+		const value = await pickMulti(ctx, "Fallback models", models.map((name) => ({ name })), draft.fallback, "tried in selected order on provider errors");
+		if (value === undefined) return false;
+		draft.fallback = value;
+	} else if (field === "thinking") {
+		const choice = await ctx.ui.select("Thinking", ["inherited", "off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+		if (choice === undefined) return false;
+		draft.thinking = choice === "inherited" ? "" : choice;
+	} else if (field === "spawn") {
+		const value = await pickMulti(ctx, "Spawn targets", roster.map((name) => ({ name })), draft.spawn);
+		if (value === undefined) return false;
+		draft.spawn = value;
+	} else if (field === "output") {
+		const choice = await ctx.ui.select("Output", ["None", "Findings", "Review", "Decision", "Custom"]);
+		if (!choice) return false;
+		if (choice === "None") draft.returns = undefined;
+		else if (choice !== "Custom") draft.returns = structuredClone(RETURNS_PRESETS.find((preset) => preset.name === choice)!.schema);
+		else {
+			const text = await ctx.ui.editor("Custom output schema — supported JSON Schema subset", draft.returns ? JSON.stringify(draft.returns, null, 2) : "{\n  \"type\": \"object\",\n  \"properties\": {}\n}");
+			if (text === undefined) return false;
+			const parsed = parseCustomReturns(text);
+			if (parsed.error) { ctx.ui.notify(`Custom schema rejected: ${parsed.error}`, "error"); return false; }
+			draft.returns = parsed.schema;
+		}
+	}
+	return true;
+}
+
 export async function newAgentWizard(ctx: ExtensionContext): Promise<void> {
-	const answers = await runWizardOverlay(ctx);
-	if (!answers || !answers.name.trim()) return;
-	const color = await pickColor(ctx, "cyan");
-	if (!color) return;
-	const dir = path.join(getAgentDir(), "agents");
-	const file = writeAgentFile(
-		{
-			name: answers.name.trim(),
-			displayName: answers.displayName.trim() || undefined,
-			description: answers.description.trim() || answers.name.trim(),
-			fallback: [],
-			auto: true,
-			color,
-			readonly: false,
-			conventions: false,
-			spawn: [],
-			systemPrompt: answers.systemPrompt.trim(),
-			tools: undefined,
-		},
-		dir,
-	);
-	ctx.ui.notify(`Created "${answers.name.trim()}" → ${file}. Run /reload to use /${path.basename(file, ".md")}.`, "info");
+	const draft = createAgentDraft();
+	const models = wizardModelNames(ctx as ExtensionContext & { scopedModels?: readonly { model: { provider: string; id: string } }[] });
+	const roster = discoverAgents(ctx.cwd, { includeProject: (ctx as any).isProjectTrusted?.() ?? false }).agents.map((agent) => agent.name);
+	let state: WorkbenchState = { stage: 0, selected: 0 };
+	while (true) {
+		const { intent, state: latest } = await showStage(ctx, draft, state);
+		state = latest;
+		if (intent.action === "cancel") return;
+		if (intent.action === "back") { state = retreatWorkbench(state); continue; }
+		if (intent.action === "suggest" && (intent.field === "description" || intent.field === "systemPrompt")) {
+			await applySuggestionFlow(ctx, draft, intent.field);
+			continue;
+		}
+		if (intent.action === "edit" && intent.field) {
+			const accepted = await editField(ctx, draft, intent.field, models, roster);
+			if (accepted) {
+				const lastRow = state.selected === STAGE_ROWS[state.stage].length - 1;
+				state = lastRow ? advanceWorkbench(state) : moveWorkbench(state, 1);
+			}
+			continue;
+		}
+		if (intent.action === "save") {
+			const issues = validateAgentDraft(draft);
+			if (issues.length) {
+				ctx.ui.notify(issues[0].message, "error");
+				const field = issues[0].field === "returns" ? "output" : issues[0].field;
+				const stage = STAGE_ROWS.findIndex((rows) => rows.includes(field));
+				state = { stage: Math.max(0, stage), selected: Math.max(0, STAGE_ROWS[stage]?.indexOf(field) ?? 0) };
+				continue;
+			}
+			try {
+				const file = writeAgentFile(draftToWritable(draft), path.join(getAgentDir(), "agents"));
+				ctx.ui.notify(`Created "${draft.name.trim()}" → ${file}. Run /reload to use /${path.basename(file, ".md")}.`, "info");
+			} catch (error) {
+				const collision = (error as NodeJS.ErrnoException).code === "EEXIST";
+				ctx.ui.notify(collision ? "That role name already has a user definition." : `Could not create agent: ${error instanceof Error ? error.message : String(error)}`, "error");
+				state = { stage: 0, selected: 0 };
+				continue;
+			}
+			return;
+		}
+	}
 }
