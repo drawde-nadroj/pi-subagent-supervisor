@@ -13,6 +13,8 @@ export class SubagentState {
 	private structuredReturns = true;
 	/** Reveal routine subagent prices in UI surfaces. History is always priced. */
 	private showCosts = false;
+	/** Persist completed-run history for stats. Defaults on for compatibility. */
+	private historyEnabled = true;
 	private listeners = new Set<() => void>();
 	private file: string;
 
@@ -25,6 +27,7 @@ export class SubagentState {
 			}
 			if (typeof data.structuredReturns === "boolean") this.structuredReturns = data.structuredReturns;
 			if (typeof data.showCosts === "boolean") this.showCosts = data.showCosts;
+			if (typeof data.historyEnabled === "boolean") this.historyEnabled = data.historyEnabled;
 		} catch {
 			/* no state yet */
 		}
@@ -50,6 +53,21 @@ export class SubagentState {
 		this.notify();
 	}
 
+	// --- run history ---
+	getHistoryEnabled(): boolean {
+		return this.historyEnabled;
+	}
+	setHistoryEnabled(on: boolean): void {
+		const previous = this.historyEnabled;
+		this.historyEnabled = on;
+		const error = this.save();
+		if (error) {
+			this.historyEnabled = previous;
+			throw error;
+		}
+		this.notify();
+	}
+
 	// --- keybinds ---
 	getKeybinds(): Record<string, string> {
 		return { ...this.keybinds };
@@ -72,13 +90,23 @@ export class SubagentState {
 	private notify(): void {
 		for (const cb of this.listeners) cb();
 	}
-	private save(): void {
+	private save(): Error | undefined {
+		const directory = path.dirname(this.file);
+		const temporary = path.join(directory, `.${path.basename(this.file)}.${process.pid}.${Date.now()}.tmp`);
 		try {
-			fs.mkdirSync(path.dirname(this.file), { recursive: true, mode: 0o700 });
-			fs.writeFileSync(this.file, JSON.stringify({ keybinds: this.keybinds, structuredReturns: this.structuredReturns, showCosts: this.showCosts }, null, 2), { encoding: "utf-8", mode: 0o600 });
-			fs.chmodSync(this.file, 0o600);
-		} catch {
-			/* best-effort */
+			fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+			fs.chmodSync(directory, 0o700);
+			fs.writeFileSync(temporary, JSON.stringify({ keybinds: this.keybinds, structuredReturns: this.structuredReturns, showCosts: this.showCosts, historyEnabled: this.historyEnabled }, null, 2), { encoding: "utf-8", mode: 0o600, flag: "wx" });
+			fs.chmodSync(temporary, 0o600);
+			fs.renameSync(temporary, this.file);
+			return undefined;
+		} catch (error) {
+			try {
+				fs.unlinkSync(temporary);
+			} catch {
+				/* no temporary file to clean up */
+			}
+			return error instanceof Error ? error : new Error(String(error));
 		}
 	}
 }

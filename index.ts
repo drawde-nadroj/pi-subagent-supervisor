@@ -6,13 +6,14 @@ import { agentDisplayName, discoverAgents } from "./agents.ts";
 import { openDashboard } from "./dashboard.ts";
 import { emptyUsage, type RunResult } from "./engine.ts";
 import { buildActiveAgentsBlock } from "./guidance.ts";
+import { executeHistoryCommand, parseHistoryCommand } from "./history.ts";
 import { Keymap } from "./keymap.ts";
 import { bridgeHerdrWorkingLease, LiveSurfaceCoordinator } from "./live-surface.ts";
 import { presentMessageIdentity, terminalOutputSummary, type StoredMessageIdentity } from "./message-presentation.ts";
 import { RunRegistry, type CallSnapshot } from "./registry.ts";
 import { SubagentState } from "./state.ts";
 import { type DispatchDeps, dispatchSingle, fmtDuration, registerSubagentTool } from "./tool.ts";
-import { aggregateRunStats, appendRunLog, entryFromRecord, filterRecentEntries, formatRunStats, getDefaultRunLogPath, readRunLog } from "./runlog.ts";
+import { aggregateRunStats, appendRunLogIfEnabled, entryFromRecord, filterRecentEntries, formatRunStats, getDefaultRunLogPath, readRunLog } from "./runlog.ts";
 import { migrateLegacyStorage } from "./storage.ts";
 
 interface OutputDetails extends StoredMessageIdentity {
@@ -47,9 +48,9 @@ export default function (pi: ExtensionAPI) {
 	const registered = new Set<string>();
 	const runLogPath = getDefaultRunLogPath();
 
-	// Cost feedback loop: persist every finished run so /agents stats can show
-	// whether each agent's spawns pay for themselves across sessions.
-	registry.onFinish((rec) => appendRunLog(runLogPath, entryFromRecord(rec)));
+	// Check the persisted preference at completion time so changing it while a run
+	// is active takes effect before that run can be appended.
+	registry.onFinish((rec) => appendRunLogIfEnabled(runLogPath, () => state.getHistoryEnabled(), entryFromRecord(rec)));
 
 	const hasAgent = (ctx: ExtensionContext, name: string): boolean => {
 		const { agents } = discoverAgents(ctx.cwd, { includeProject: ctx.isProjectTrusted?.() ?? false });
@@ -133,7 +134,7 @@ export default function (pi: ExtensionAPI) {
 	const showRoster = (ctx: ExtensionContext): void => {
 		const { agents } = discoverAgents(ctx.cwd, { includeProject: ctx.isProjectTrusted?.() ?? false });
 		const lines = agents.length
-			? ["Available subagents:", ...agents.map((a) => `- /${a.name} <task> — ${a.description}`), "", "Other commands: /agents stats, /agents returns [on|off], /agents -k"]
+			? ["Available subagents:", ...agents.map((a) => `- /${a.name} <task> — ${a.description}`), "", "Other commands: /agents stats, /agents history on|off|status|clear, /agents returns [on|off], /agents -k"]
 			: ["No subagents discovered."];
 		showCommandLines(lines);
 	};
@@ -191,16 +192,23 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("agents", {
-		description: "Open the subagents dashboard. `/agents -k` kills running subagents; `/agents stats` shows recent (30-day) per-agent cost history (`/agents stats all` for lifetime); `/agents returns [on|off]` toggles structured-returns schema enforcement.",
+		description: "Open the subagents dashboard. `/agents -k` kills running subagents; `/agents stats` shows recent cost history; `/agents history on|off|status|clear` controls local history; `/agents returns [on|off]` toggles structured returns.",
 		handler: async (args, ctx) => {
 			holder.ctx = ctx;
 			const a = args.trim();
-			if (a.includes("-k")) {
+			if (a === "-k") {
 				killAll(ctx);
 				return;
 			}
 			if (a === "stats" || a === "stats all" || a === "stats recent") {
 				showStats(a === "stats all");
+				return;
+			}
+			const historyAction = parseHistoryCommand(a);
+			if (historyAction !== undefined) {
+				const result = executeHistoryCommand(historyAction, state, runLogPath);
+				if (ctx.hasUI) ctx.ui.notify(result.message, result.level);
+				else showCommandLines([result.message]);
 				return;
 			}
 			// `/agents returns [on|off]` — toggle `returns:` schema enforcement.

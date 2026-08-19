@@ -44,6 +44,7 @@ For one session without installing, use `pi -e /absolute/path/to/pi-subagent-sup
 - `/agents` opens the dashboard.
 - `/agents -k` stops all active subagents.
 - `/agents stats` shows the last 30 days; `/agents stats all` shows all local history.
+- `/agents history on|off|status|clear` controls local run-history recording. Recording defaults to on; turning it off retains existing history, and `clear` deletes it without changing the preference.
 - `/agents returns on|off` controls structured-return enforcement.
 - `/stop-agents` stops active runs.
 - `/<role> <task>` runs one discovered role.
@@ -101,7 +102,9 @@ Child output is summarized back to the parent. A `returns` schema adds validatio
 
 ## Local data and privacy
 
-Preferences and history live outside the installed package under `~/.pi/agent/pi-subagents/` (or the configured Pi agent directory). `state.json` stores preferences; `runs.jsonl` stores local task summaries, failure summaries, working directories, token/tool usage, and cost. On first startup after upgrading from package-local storage, either legacy file is copied here if no destination file exists. Parent directories are created as needed and files use private permissions where supported. Package updates therefore do not wipe these files. Nothing in this extension uploads the history, but model providers still receive tasks executed with their models.
+Preferences and history live outside the installed package under `~/.pi/agent/pi-subagents/` (or the configured Pi agent directory). `state.json` stores preferences; `runs.jsonl` stores local task summaries, failure summaries, working directories, token/tool usage, and cost. On first startup after upgrading from package-local storage, either legacy file is copied here if no destination file exists. Parent directories are created as needed and files use private permissions where supported. Package updates and uninstalling the extension do not wipe these files. Nothing in this extension uploads the history, but model providers still receive tasks executed with their models.
+
+Use `/agents history off` to stop new history while retaining existing entries, or `/agents history clear` to delete only `runs.jsonl`. To remove all extension data after uninstalling, delete the `pi-subagents` data directory manually.
 
 ## Limitations
 

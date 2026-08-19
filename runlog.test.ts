@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { aggregateRunStats, appendRunLog, entryFromRecord, failureCategory, filterRecentEntries, formatRunStats, getDefaultRunLogPath, readRunLog, type RunLogEntry } from "./runlog.ts";
+import { aggregateRunStats, appendRunLog, appendRunLogIfEnabled, clearRunLog, entryFromRecord, failureCategory, filterRecentEntries, formatRunStats, getDefaultRunLogPath, readRunLog, type RunLogEntry } from "./runlog.ts";
 import { RunRegistry } from "./registry.ts";
 import { createPersona } from "./persona.ts";
 import { emptyUsage } from "./engine.ts";
@@ -72,6 +72,30 @@ fs.appendFileSync(tmp, "not json\n{\"broken\":\n");
 appendRunLog(tmp, entry({ agent: "worker", cost: 0.2, durationMs: 90_000, output: 800 }));
 const read = readRunLog(tmp);
 assert.equal(read.length, 3);
+
+// clear deletes only the history file, distinguishes an absent file, and surfaces other errors.
+const stateFile = path.join(path.dirname(tmp), "state.json");
+fs.writeFileSync(stateFile, "keep me", "utf8");
+assert.equal(clearRunLog(tmp), true);
+assert.equal(fs.existsSync(tmp), false);
+assert.equal(fs.readFileSync(stateFile, "utf8"), "keep me");
+assert.equal(clearRunLog(tmp), false);
+
+// Completion persistence reads the preference for every append, so toggles apply immediately.
+let historyEnabled = false;
+assert.equal(appendRunLogIfEnabled(tmp, () => historyEnabled, entry({ agent: "off" })), false);
+assert.equal(fs.existsSync(tmp), false);
+historyEnabled = true;
+assert.equal(appendRunLogIfEnabled(tmp, () => historyEnabled, entry({ agent: "on" })), true);
+assert.deepEqual(readRunLog(tmp).map((item) => item.agent), ["on"]);
+clearRunLog(tmp);
+
+const notAFile = path.join(path.dirname(tmp), "history-directory");
+fs.mkdirSync(notAFile);
+assert.throws(() => clearRunLog(notAFile), (error: unknown) => (error as NodeJS.ErrnoException).code !== "ENOENT");
+
+// Restore the entries used by the aggregation assertions below.
+for (const item of read) appendRunLog(tmp, item);
 
 // aggregate: grouped per agent, sorted by total cost desc, failure count kept.
 const stats = aggregateRunStats(read);

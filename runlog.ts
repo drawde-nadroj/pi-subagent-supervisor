@@ -86,6 +86,24 @@ export function appendRunLog(file: string, entry: RunLogEntry): void {
 	}
 }
 
+/** Check the current preference immediately before a completion append. */
+export function appendRunLogIfEnabled(file: string, isEnabled: () => boolean, entry: RunLogEntry): boolean {
+	if (!isEnabled()) return false;
+	appendRunLog(file, entry);
+	return true;
+}
+
+/** Delete only the run-history file. Returns false when no history file exists. */
+export function clearRunLog(file: string): boolean {
+	try {
+		fs.unlinkSync(file);
+		return true;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+		throw error;
+	}
+}
+
 /** Read all entries, skipping blank/corrupt lines. Missing file = empty history. */
 export function readRunLog(file: string): RunLogEntry[] {
 	let raw: string;
