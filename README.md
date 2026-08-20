@@ -1,14 +1,15 @@
 # Pi Subagent Supervisor
 
-A Pi extension for delegating focused work to isolated child sessions. It discovers Markdown agent definitions, advertises eligible roles to the main model, and provides single, parallel, and sequence execution with tracked usage and local history.
+A transparent supervisor for isolated Pi subagents. Configure how each role works, delegate single, parallel, or sequence tasks, and inspect the assigned work and returned results in Pi's transcript.
 
 ## Capabilities
 
 - isolated child sessions with separate prompts and in-memory session state
 - model-facing `subagent` tool and per-role slash commands
 - up to 10 parallel tasks with one immediate respawn per failed branch, plus ordered sequences with configured execution-failure retries
-- dashboard for routing, editing, creating, opening, and deleting custom roles
+- dashboard and staged workbench for routing, creating, inspecting, editing, opening, and deleting custom roles
 - model selection, provider-error fallback models, thinking level, tool limits, read-only mode, project conventions, structured returns, and nested delegation
+- visible assigned tasks and terminal results for model-tool roots and their nested subagents
 - live run status, token/cost reporting, stop controls, and local aggregate statistics
 
 ## Bundled roles
@@ -59,6 +60,19 @@ The model-facing tool accepts exactly one mode:
 
 A sequence may define `retry` with `maxRetries` and `retrySteps`. Retries happen only after execution failure; they do not interpret review verdicts.
 
+## What you can inspect
+
+The extension keeps orchestration visible without adding full transcripts to run history:
+
+- **While a model-tool call runs:** its row shows every root and nested subagent, the assigned task, current state or concrete tool activity, and elapsed time. A parent waiting for its delegated child is shown as waiting while independent parallel branches can continue.
+- **After a model-tool call finishes:** the collapsed row keeps every root and nested task plus its terminal answer or error. Pi's configured tool-output expansion shortcut adds activity and execution metrics. For validated structured results, it also shows both Readable and Exact JSON views.
+- **What the parent model receives:** a single call returns that root's final text; a parallel call returns every root result with labels and success state; a successful sequence returns only its final step. `{previous}` passes the preceding step's final text without a second model rewriting it.
+- **Per-role slash commands:** `/<role>` renders the requested root task and terminal answer as a transcript message. Its usage totals include nested work, but the final slash-command message does not reproduce the complete nested tree.
+
+Each stored or returned agent result is capped at 50 KiB. The workbench exposes the configured system instructions and controls, while run rows expose the assigned task. The transcript does **not** currently reconstruct one complete effective child prompt containing the system instructions, inherited conventions, task wrapper, and generated structured-return instruction.
+
+`runs.jsonl` is separate from transcript presentation. It stores one telemetry record per root run, including timestamps, role and status, working directory, token and tool usage, cost, the first 80 characters of normalized task text, and up to 120 characters of failure text. It does not store answers, complete prompts, transcripts, or parsed structured-result values.
+
 ## Discovery and trust
 
 Names are merged in this order, with later layers winning:
@@ -101,13 +115,13 @@ New and existing user definitions use the same staged workbench: Identity, Routi
 
 Children do not receive the parent transcript, extensions, skills, or the normal context-file stack. `conventions: true` adds only global and path-scoped `AGENTS.md` files. Models inherit by default; fallback models run only after quota, authentication, network, availability, or similar provider errors—not ordinary task failure.
 
-Child output is returned to the parent. A `returns` schema adds validation and one repair turn when enabled. Structured results default to **Readable** presentation. Each agent may inherit the global preference or override it with **Readable** or **Exact JSON**. Exact JSON is `JSON.stringify` of the validated extracted value; metadata or extraction failures fall back to raw final text. Pi's configured tool-output expansion shortcut (`Ctrl+O` by default) shows both views; expansion is global, not a focusable per-row control. Presentation and persisted render surfaces have a 50 KiB cap, while canonical parent-facing tool content, substitutions, nested returns, result/error semantics, and `RunResult.finalText` remain unchanged.
+A `returns` schema adds validation and one repair turn when enabled. Structured results default to **Readable** presentation. Each agent may inherit the global preference or override it with **Readable** or **Exact JSON**. Exact JSON is `JSON.stringify` of the validated extracted value; metadata or extraction failures fall back to raw final text. Pi's configured tool-output expansion shortcut (`Ctrl+O` by default) shows both views; expansion is global, not a focusable per-row control. Presentation changes only the TUI: canonical parent-facing tool content, substitutions, nested returns, result/error semantics, and `RunResult.finalText` remain unchanged.
 
-Nested delegation is depth-limited; nested parallel calls require every target to be read-only. A parent can appear waiting while unrelated parallel branches continue; this is observable coordination state, not itself a hang or timeout. Parallel and nested work can increase usage quickly.
+Nested delegation is depth-limited; nested parallel calls require every target to be read-only. Parallel and nested work can increase usage quickly.
 
 ## Local data and privacy
 
-Preferences and history live outside the installed package under `~/.pi/agent/pi-subagents/` (or the configured Pi agent directory). `state.json` stores preferences. `runs.jsonl` is run-history telemetry only: local task summaries, failure summaries, working directories, token/tool usage, and cost. It does not store parsed structured-result values. Cost values are provider-reported estimates, not billing records. On first startup after upgrading from package-local storage, either legacy file is copied here if no destination file exists. Parent directories are created as needed and files use private permissions where supported. Package updates and uninstalling the extension do not wipe these files. Nothing in this extension uploads the history, but model providers still receive tasks executed with their models.
+Preferences and history live outside the installed package under `~/.pi/agent/pi-subagents/` (or the configured Pi agent directory). `state.json` stores preferences. `runs.jsonl` is run-history telemetry only: truncated task and failure summaries, working directories, token/tool usage, and cost. It does not store answers, full prompts, transcripts, or parsed structured-result values. Cost values are provider-reported estimates, not billing records. On first startup after upgrading from package-local storage, either legacy file is copied here if no destination file exists. Parent directories are created as needed and files use private permissions where supported. Package updates and uninstalling the extension do not wipe these files. Nothing in this extension uploads the history, but model providers still receive tasks executed with their models.
 
 Use `/agents history off` to stop new history while retaining existing entries, or `/agents history clear` to delete only `runs.jsonl`. To remove all extension data after uninstalling, delete the `pi-subagents` data directory manually.
 

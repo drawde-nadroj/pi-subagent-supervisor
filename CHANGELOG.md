@@ -17,5 +17,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Existing agents now use the lossless AgentDraft workbench with bounded model, thinking, permission, delegation, and output controls; unavailable saved choices remain preserved.
 - Structured-result descriptors are versioned validation recipes; canonical child text remains authoritative and parsed values are never persisted.
+- Documentation now distinguishes transcript task/result visibility, parent-model return shapes, slash-command output, structured views, and telemetry-only run history.
 
 [Unreleased]: https://github.com/drawde-nadroj/pi-subagent-supervisor/commits/main
