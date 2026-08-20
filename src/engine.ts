@@ -15,6 +15,7 @@ import { Type } from "typebox";
 import type { AgentConfig } from "./agents.ts";
 import { resolveChildToolNames } from "./agents.ts";
 import { gitInspectToolForAgent } from "./git-inspect.ts";
+import { inspectEffectivePrompt, type EffectivePromptAttempt } from "./effective-prompt.ts";
 
 /** How deep a spawn chain may nest (worker → scout → … ) before delegation is refused. */
 export const MAX_SPAWN_DEPTH = 3;
@@ -57,6 +58,7 @@ export interface RunUsage {
 
 export type RunEvent =
 	| { type: "status"; status: RunStatus }
+	| { type: "pre_prompt"; prompt: Readonly<EffectivePromptAttempt> }
 	| { type: "tool"; name: string; argsPreview: string }
 	| { type: "text"; text: string }
 	| { type: "usage"; usage: RunUsage; contextPercent: number | null };
@@ -267,6 +269,8 @@ export function createSpawnTool(args: {
 	};
 }
 
+export type ChildSessionFactory = typeof createChildSession;
+
 export async function runAgent(args: {
 	agent: AgentConfig;
 	task: string;
@@ -284,6 +288,11 @@ export async function runAgent(args: {
 	/** Optional final-output check (structured returns). Return null when valid, or a
 	 * repair message; the session gets one extra prompt to fix its output. */
 	validate?: (finalText: string) => string | null;
+	/** Privacy gate checked at capture time. No prompt runtime API is read when false. */
+	promptCaptureEnabled?: () => boolean;
+	promptOrder?: number;
+	/** Public test/integration seam; production uses createChildSession. */
+	createSession?: ChildSessionFactory;
 	onEvent: (e: RunEvent) => void;
 }): Promise<RunHandle> {
 	const { agent, registry, cwd, onEvent } = args;
@@ -318,7 +327,7 @@ export async function runAgent(args: {
 	// Child sees only its own prompt and the explicitly inherited AGENTS.md
 	// conventions; createChildSession keeps the SDK compatibility boundary in
 	// one place without changing the surrounding run lifecycle.
-	const session = await createChildSession({
+	const session = await (args.createSession ?? createChildSession)({
 		agent,
 		model,
 		cwd,
@@ -400,6 +409,20 @@ export async function runAgent(args: {
 	const promise: Promise<RunResult> = (async () => {
 		try {
 			onEvent({ type: "status", status: "running" });
+			// Read public runtime state at the last synchronous point before the launch.
+			// The repair prompt deliberately has no corresponding event.
+			if (args.promptCaptureEnabled?.() === true) {
+				onEvent({ type: "pre_prompt", prompt: inspectEffectivePrompt({
+					order: args.promptOrder ?? 1,
+					systemPrompt: session.systemPrompt,
+					firstUserMessage: firstMessage,
+					provider: session.model.provider,
+					model: session.model.id,
+					thinkingLevel: session.thinkingLevel,
+					activeTools: session.getActiveToolNames(),
+					cwd,
+				}) });
+			}
 			await session.prompt(firstMessage);
 			let finalText = session.getLastAssistantText() ?? "";
 			// Structured returns: one repair turn if the output misses the schema.

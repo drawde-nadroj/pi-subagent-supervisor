@@ -12,7 +12,7 @@ export async function showPreferences(ctx: ExtensionContext, km: Keymap, state: 
 			const refresh = () => { cached = undefined; tui.requestRender(); };
 			const handleInput = (data: string) => {
 				if (matchesKey(data, Key.escape)) return done(false);
-				if (matchesKey(data, Key.up) || matchesKey(data, Key.down)) { index = matchesKey(data, Key.up) ? Math.max(0, index - 1) : Math.min(2, index + 1); refresh(); return; }
+				if (matchesKey(data, Key.up) || matchesKey(data, Key.down)) { index = matchesKey(data, Key.up) ? Math.max(0, index - 1) : Math.min(3, index + 1); refresh(); return; }
 				if (matchesKey(data, Key.left) || matchesKey(data, Key.right) || matchesKey(data, Key.enter)) {
 					if (index === 0) { state.setShowCosts(!state.getShowCosts()); refresh(); }
 					else if (index === 1) {
@@ -21,6 +21,11 @@ export async function showPreferences(ctx: ExtensionContext, km: Keymap, state: 
 						} catch (error) {
 							ctx.ui.notify(error instanceof Error ? error.message : String(error), "error");
 						}
+						refresh();
+					}
+					else if (index === 2) {
+						try { state.setPromptCaptureEnabled(!state.getPromptCaptureEnabled()); }
+						catch (error) { ctx.ui.notify(error instanceof Error ? error.message : String(error), "error"); }
 						refresh();
 					}
 					else done(true);
@@ -35,7 +40,8 @@ export async function showPreferences(ctx: ExtensionContext, km: Keymap, state: 
 				const row = (at: number, label: string, value: string) => add(`${index === at ? theme.fg("accent", " > ") : "   "}${theme.fg(index === at ? "accent" : "text", label)} ${theme.fg("dim", value)}`);
 				row(0, "Show costs", state.getShowCosts() ? "on" : "off");
 				row(1, "Structured results", state.getResultView());
-				row(2, "Keybindings…", "");
+				row(2, "Effective prompt capture", state.getPromptCaptureEnabled() ? "on — persists in Pi session" : "off — opt-in session storage");
+				row(3, "Keybindings…", "");
 				add(theme.fg("accent", "─".repeat(width)));
 				return lines;
 			};

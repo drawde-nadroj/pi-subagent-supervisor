@@ -2,6 +2,10 @@ import type { EventBus } from "@earendil-works/pi-coding-agent";
 import type { AgentConfig } from "./agents.ts";
 import { emptyUsage, type RunEvent, type RunHandle, type RunResult, type RunUsage } from "./engine.ts";
 import type { PersonaDescriptor } from "./persona.ts";
+import { EFFECTIVE_PROMPT_ATTEMPT_LIMIT, EFFECTIVE_PROMPT_CALL_LIMIT, EFFECTIVE_PROMPT_MAX_ATTEMPTS, aggregateOmission, effectivePromptBytes, extendAggregateOmission, normalizeEffectivePrompt, omitAttemptTextForAggregate, type EffectivePromptCaptureEntry } from "./effective-prompt.ts";
+
+// Reserve one maximum-sized slot so aggregate overflow is always explicit.
+const EFFECTIVE_PROMPT_ORDINARY_BUDGET = EFFECTIVE_PROMPT_CALL_LIMIT - EFFECTIVE_PROMPT_ATTEMPT_LIMIT;
 
 export type CallId = number;
 export type RunId = number;
@@ -55,6 +59,7 @@ export interface RunRecord {
 	historyEligible?: boolean;
 	historyEmitted?: boolean;
 	children: RunRecord[];
+	effectivePrompts: readonly Readonly<EffectivePromptCaptureEntry>[];
 }
 
 export interface RunNodeSnapshot {
@@ -81,6 +86,8 @@ export interface RunNodeSnapshot {
 	ownCost: number;
 	subtreeCost: number;
 	children: RunNodeSnapshot[];
+	/** Present only in terminal call snapshots; live snapshots redact prompt material. */
+	effectivePrompts?: readonly Readonly<EffectivePromptCaptureEntry>[];
 }
 
 export interface CallCounts {
@@ -153,6 +160,10 @@ interface CallState {
 	orchestrationEnded: boolean;
 	finishResult?: CallFinishResult;
 	finishEmitted: boolean;
+	promptCount: number;
+	promptSeen: number;
+	promptBytes: number;
+	promptOverflow?: { record: RunRecord; index: number };
 }
 
 function cloneUsage(usage: RunUsage): RunUsage {
@@ -203,6 +214,9 @@ export class RunRegistry {
 			revision: 0,
 			orchestrationEnded: false,
 			finishEmitted: false,
+			promptCount: 0,
+			promptSeen: 0,
+			promptBytes: 0,
 		};
 		this.calls.push(call);
 		this.notify();
@@ -383,6 +397,7 @@ export class RunRegistry {
 			mode: call.options.mode,
 			chainStep,
 			children: [],
+			effectivePrompts: Object.freeze([]),
 		};
 		this.records.set(record.id, record);
 		return record;
@@ -412,6 +427,45 @@ export class RunRegistry {
 		if (terminal(record.status)) return;
 		const at = this.now();
 		switch (event.type) {
+			case "pre_prompt": {
+				const order = ++call.promptSeen;
+				const prompt = normalizeEffectivePrompt({ ...event.prompt, order });
+				if (!prompt || prompt.kind !== "attempt") break;
+				const size = effectivePromptBytes(prompt);
+				const atEntryLimit = call.promptCount >= EFFECTIVE_PROMPT_MAX_ATTEMPTS - 1;
+				if (!atEntryLimit && !call.promptOverflow && call.promptBytes + size <= EFFECTIVE_PROMPT_ORDINARY_BUDGET) {
+					record.effectivePrompts = Object.freeze([...record.effectivePrompts, prompt]);
+					call.promptCount += 1;
+					call.promptBytes += size;
+					break;
+				}
+				if (!atEntryLimit && !call.promptOverflow) {
+					const redacted = omitAttemptTextForAggregate(prompt);
+					const redactedSize = redacted ? effectivePromptBytes(redacted) : Infinity;
+					if (redacted && call.promptBytes + redactedSize <= EFFECTIVE_PROMPT_CALL_LIMIT - 512) {
+						record.effectivePrompts = Object.freeze([...record.effectivePrompts, redacted]);
+						call.promptCount += 1;
+						call.promptBytes += redactedSize;
+						break;
+					}
+				}
+				if (call.promptOverflow) {
+					const { record: owner, index } = call.promptOverflow;
+					const previous = owner.effectivePrompts[index];
+					if (previous?.kind !== "aggregate_omission") break;
+					const next = extendAggregateOmission(previous, order);
+					owner.effectivePrompts = Object.freeze(owner.effectivePrompts.map((entry, at) => at === index ? next : entry));
+					call.promptBytes += effectivePromptBytes(next) - effectivePromptBytes(previous);
+				} else {
+					const marker = aggregateOmission(order);
+					const index = record.effectivePrompts.length;
+					record.effectivePrompts = Object.freeze([...record.effectivePrompts, marker]);
+					call.promptOverflow = { record, index };
+					call.promptCount += 1;
+					call.promptBytes += effectivePromptBytes(marker);
+				}
+				break;
+			}
 			case "status":
 				record.activity = { type: "status", at, text: event.status };
 				break;
@@ -431,7 +485,8 @@ export class RunRegistry {
 				record.activity = { type: "usage", at };
 				break;
 		}
-		this.changed(call);
+		// Captures are terminal-only metadata. Do not advance live revisions or publish onUpdate churn.
+		if (event.type !== "pre_prompt") this.changed(call);
 	}
 
 	private finishInCall(call: CallState, runId: RunId, result: RunResult, emitRootFinish = true): void {
@@ -475,7 +530,8 @@ export class RunRegistry {
 	}
 
 	private snapshotCall(call: CallState, now: number): CallSnapshot {
-		const roots = call.roots.map((record) => this.snapshotNode(record, now));
+		const terminalCall = call.finishedAt !== undefined;
+		const roots = call.roots.map((record) => this.snapshotNode(record, now, terminalCall));
 		const all = [...this.walk(call.roots)];
 		const counts: CallCounts = {
 			total: all.length,
@@ -501,8 +557,8 @@ export class RunRegistry {
 		};
 	}
 
-	private snapshotNode(record: RunRecord, now: number): RunNodeSnapshot {
-		const children = record.children.map((child) => this.snapshotNode(child, now));
+	private snapshotNode(record: RunRecord, now: number, includePrompts: boolean): RunNodeSnapshot {
+		const children = record.children.map((child) => this.snapshotNode(child, now, includePrompts));
 		const ownCost = record.usage.cost;
 		return {
 			id: record.id,
@@ -531,6 +587,7 @@ export class RunRegistry {
 			ownCost,
 			subtreeCost: ownCost + children.reduce((sum, child) => sum + child.subtreeCost, 0),
 			children,
+			...(includePrompts ? { effectivePrompts: Object.freeze(record.effectivePrompts.map((entry) => normalizeEffectivePrompt(structuredClone(entry))!)) } : {}),
 		};
 	}
 

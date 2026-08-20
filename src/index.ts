@@ -16,6 +16,7 @@ import { SubagentState } from "./state.ts";
 import { type DispatchDeps, dispatchSingle, fmtDuration, registerSubagentTool } from "./tool.ts";
 import { aggregateRunStats, appendRunLogIfEnabled, entryFromRecord, filterRecentEntries, formatRunStats, getDefaultRunLogPath, readRunLog } from "./runlog.ts";
 import { migrateLegacyStorage } from "./storage.ts";
+import { EFFECTIVE_PROMPT_CALL_LIMIT, EFFECTIVE_PROMPT_MAX_ATTEMPTS, effectivePromptBytes, normalizeEffectivePrompt, renderEffectivePromptAttempt, type EffectivePromptCaptureEntry } from "./effective-prompt.ts";
 
 interface OutputDetails extends StoredMessageIdentity {
 	ok: boolean;
@@ -24,6 +25,21 @@ interface OutputDetails extends StoredMessageIdentity {
 	text: string;
 	structuredResult?: import("./result-view.ts").StructuredResultDescriptor;
 	usage: { input: number; output: number; cost: number; tools?: number };
+	effectivePrompts?: readonly Readonly<EffectivePromptCaptureEntry>[];
+}
+
+function normalizedPromptEntries(value: unknown): readonly Readonly<EffectivePromptCaptureEntry>[] {
+	if (!Array.isArray(value) || value.length > EFFECTIVE_PROMPT_MAX_ATTEMPTS) return [];
+	let total = 0;
+	const entries: Readonly<EffectivePromptCaptureEntry>[] = [];
+	for (const candidate of value) {
+		const normalized = normalizeEffectivePrompt(candidate);
+		if (!normalized) return [];
+		total += effectivePromptBytes(normalized);
+		if (total > EFFECTIVE_PROMPT_CALL_LIMIT) return [];
+		entries.push(normalized);
+	}
+	return Object.freeze(entries);
 }
 
 class CompactTaskLine implements Component {
@@ -95,6 +111,11 @@ export default function (pi: ExtensionAPI) {
 		if (hasAlternate) {
 			c.addChild(new Text(theme.fg("dim", structuredViewHint(keyText("app.tools.expand"), opts.expanded)), 0, 0));
 		}
+		const promptEntries = opts.expanded ? normalizedPromptEntries(d.effectivePrompts) : [];
+		if (promptEntries.length > 0) {
+			c.addChild(new Text(theme.fg("dim", theme.bold("Launch input")), 0, 0));
+			for (const prompt of promptEntries) c.addChild(new Text(renderEffectivePromptAttempt(prompt), 0, 0));
+		}
 		return c;
 	});
 
@@ -123,6 +144,7 @@ export default function (pi: ExtensionAPI) {
 				text: summary.text || "(no output)",
 				structuredResult: summary.structuredResult,
 				usage: summary.usage,
+				effectivePrompts: terminalRoot?.effectivePrompts,
 			},
 		});
 	};
@@ -166,6 +188,7 @@ export default function (pi: ExtensionAPI) {
 		showOutput: (agent, result, snapshot) => showOutput(agent, result, { snapshot }),
 		structuredReturns: () => state.getStructuredReturns(),
 		showCosts: () => state.getShowCosts(),
+		promptCaptureEnabled: () => state.getPromptCaptureEnabled(),
 		resultView: () => state.getResultView(),
 		liveSurface,
 	};

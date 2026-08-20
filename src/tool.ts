@@ -87,6 +87,8 @@ export interface DispatchDeps {
 	structuredReturns?: () => boolean;
 	/** Whether routine renderer surfaces should reveal prices. Default: hidden. */
 	showCosts?: () => boolean;
+	/** Opt-in privacy gate for effective prompt inspection. Default: disabled. */
+	promptCaptureEnabled?: () => boolean;
 	/** Global structured-result presentation default. */
 	resultView?: () => ResultView;
 	/** Sole clock/invalidation owner for active transcript projections. */
@@ -178,6 +180,8 @@ async function runTrackedNode(
 					conventions: attempt.conventions,
 					signal: options.signal,
 					validate,
+					promptCaptureEnabled: deps.promptCaptureEnabled,
+					promptOrder: i + 1,
 					spawn: options.allowSpawn !== false && attempt.spawn.length > 0 ? {
 						depth: options.depth,
 						resolveAgent,

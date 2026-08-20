@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Isolated subagent execution, configurable agent definitions, nested runs, fallbacks, structured returns, and routing controls.
 - Dashboard, unified staged Create/Edit agent workbench, run history, cost reporting, and bundled agent roles.
 - Readable and exact structured-result views, including dedicated Findings, Review, and Decision presentations and a per-agent override.
+- Opt-in, bounded Effective prompt capture for terminal run inspection, with runtime attempt metadata and explicit privacy disclosures.
 
 ### Changed
 

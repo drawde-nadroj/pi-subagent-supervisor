@@ -10,6 +10,7 @@ import { colorize } from "./colors.ts";
 import { type PersonaDescriptor } from "./persona.ts";
 import { isSupportedReturnsSchema, resultSections, structuredViewHint, type StructuredResultDescriptor } from "./result-view.ts";
 import { RESULT_CAP_BYTES, type CallSnapshot, type RunNodeSnapshot, type RunNodeStatus } from "./registry.ts";
+import { EFFECTIVE_PROMPT_CALL_LIMIT, EFFECTIVE_PROMPT_MAX_ATTEMPTS, effectivePromptBytes, normalizeEffectivePrompt, renderEffectivePromptAttempt, type EffectivePromptCaptureEntry } from "./effective-prompt.ts";
 import {
 	agentContentPrefix,
 	childTreePosition,
@@ -377,7 +378,7 @@ function normalizeStructuredResult(value: unknown): StructuredResultDescriptor |
 	} catch { return undefined; }
 }
 
-function normalizeNode(value: unknown, seen: Set<object>): RunNodeSnapshot | undefined {
+function normalizeNode(value: unknown, seen: Set<object>, promptBudget: { count: number; bytes: number }): RunNodeSnapshot | undefined {
 	if (!isRecord(value) || seen.has(value)) return undefined;
 	seen.add(value);
 
@@ -397,6 +398,27 @@ function normalizeNode(value: unknown, seen: Set<object>): RunNodeSnapshot | und
 	const finalText = optionalString(value.finalText);
 	const error = optionalString(value.error);
 	const structuredResult = value.structuredResult === undefined ? undefined : normalizeStructuredResult(value.structuredResult);
+	let effectivePrompts: readonly Readonly<EffectivePromptCaptureEntry>[] | undefined;
+	if (value.effectivePrompts !== undefined) {
+		const countBefore = promptBudget.count;
+		const bytesBefore = promptBudget.bytes;
+		try {
+			if (!Array.isArray(value.effectivePrompts) || value.effectivePrompts.length > EFFECTIVE_PROMPT_MAX_ATTEMPTS) throw new Error("invalid prompt descriptor list");
+			effectivePrompts = Object.freeze(value.effectivePrompts.map((prompt: unknown) => {
+				const normalized = normalizeEffectivePrompt(prompt);
+				if (!normalized) throw new Error("invalid prompt descriptor");
+				const size = effectivePromptBytes(normalized);
+				if (promptBudget.count + 1 > EFFECTIVE_PROMPT_MAX_ATTEMPTS || promptBudget.bytes + size > EFFECTIVE_PROMPT_CALL_LIMIT) throw new Error("prompt call limit exceeded");
+				promptBudget.count += 1;
+				promptBudget.bytes += size;
+				return normalized;
+			}));
+		} catch {
+			promptBudget.count = countBefore;
+			promptBudget.bytes = bytesBefore;
+			effectivePrompts = undefined;
+		}
+	}
 
 	if (
 		id === undefined || callId === undefined
@@ -423,7 +445,7 @@ function normalizeNode(value: unknown, seen: Set<object>): RunNodeSnapshot | und
 
 	const children: RunNodeSnapshot[] = [];
 	for (const childValue of value.children) {
-		const child = normalizeNode(childValue, seen);
+		const child = normalizeNode(childValue, seen, promptBudget);
 		if (!child) return undefined;
 		children.push(child);
 	}
@@ -455,6 +477,7 @@ function normalizeNode(value: unknown, seen: Set<object>): RunNodeSnapshot | und
 		ownCost,
 		subtreeCost,
 		children,
+		...(effectivePrompts === undefined ? {} : { effectivePrompts }),
 	};
 }
 
@@ -499,11 +522,21 @@ export function normalizeV2Details(value: unknown): SubagentToolDetailsV2 | unde
 	if (countKeys.some((key) => counts[key] === undefined)) return undefined;
 
 	const seen = new Set<object>();
+	const promptBudget = { count: 0, bytes: 0 };
 	const roots: RunNodeSnapshot[] = [];
 	for (const rootValue of call.roots) {
-		const root = normalizeNode(rootValue, seen);
+		const root = normalizeNode(rootValue, seen, promptBudget);
 		if (!root) return undefined;
 		roots.push(root);
+	}
+	// Stored/live partial details are untrusted. Prompt text becomes visible only
+	// after the call has one terminal finishedAt value.
+	if (finishedAt === undefined) {
+		const redact = (node: RunNodeSnapshot): void => {
+			delete node.effectivePrompts;
+			for (const child of node.children) redact(child);
+		};
+		for (const root of roots) redact(root);
 	}
 
 	return {
@@ -762,6 +795,10 @@ function renderExpandedNode(
 		for (const { label, text, format } of terminalSections(node, true)) {
 			lines.push(section(label));
 			lines.push(...(format === "literal" ? wrapStyled(text, theme, "text", width, contentPrefix()) : renderMarkdown(text, contentPrefix(), width)));
+		}
+		if ((node.effectivePrompts?.length ?? 0) > 0) {
+			lines.push(section("Launch input"));
+			for (const prompt of node.effectivePrompts!) lines.push(...wrapStyled(renderEffectivePromptAttempt(prompt), theme, "text", width, contentPrefix()));
 		}
 	}
 	lines.push(section("Details"));

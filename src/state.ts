@@ -16,6 +16,8 @@ export class SubagentState {
 	private showCosts = false;
 	/** Persist completed-run history for stats. Defaults on for compatibility. */
 	private historyEnabled = true;
+	/** Prompt material is sensitive and is never captured unless explicitly enabled. */
+	private promptCaptureEnabled = false;
 	private listeners = new Set<() => void>();
 	private file: string;
 
@@ -30,6 +32,7 @@ export class SubagentState {
 			if (data.resultView === "readable" || data.resultView === "exact") this.resultView = data.resultView;
 			if (typeof data.showCosts === "boolean") this.showCosts = data.showCosts;
 			if (typeof data.historyEnabled === "boolean") this.historyEnabled = data.historyEnabled;
+			if (typeof data.promptCaptureEnabled === "boolean") this.promptCaptureEnabled = data.promptCaptureEnabled;
 		} catch {
 			/* no state yet */
 		}
@@ -82,6 +85,15 @@ export class SubagentState {
 		this.notify();
 	}
 
+	getPromptCaptureEnabled(): boolean { return this.promptCaptureEnabled; }
+	setPromptCaptureEnabled(on: boolean): void {
+		const previous = this.promptCaptureEnabled;
+		this.promptCaptureEnabled = on;
+		const error = this.save();
+		if (error) { this.promptCaptureEnabled = previous; throw error; }
+		this.notify();
+	}
+
 	// --- keybinds ---
 	getKeybinds(): Record<string, string> {
 		return { ...this.keybinds };
@@ -110,7 +122,7 @@ export class SubagentState {
 		try {
 			fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
 			fs.chmodSync(directory, 0o700);
-			fs.writeFileSync(temporary, JSON.stringify({ keybinds: this.keybinds, structuredReturns: this.structuredReturns, ...(this.resultView === "readable" ? {} : { resultView: this.resultView }), showCosts: this.showCosts, historyEnabled: this.historyEnabled }, null, 2), { encoding: "utf-8", mode: 0o600, flag: "wx" });
+			fs.writeFileSync(temporary, JSON.stringify({ keybinds: this.keybinds, structuredReturns: this.structuredReturns, ...(this.resultView === "readable" ? {} : { resultView: this.resultView }), showCosts: this.showCosts, historyEnabled: this.historyEnabled, promptCaptureEnabled: this.promptCaptureEnabled }, null, 2), { encoding: "utf-8", mode: 0o600, flag: "wx" });
 			fs.chmodSync(temporary, 0o600);
 			fs.renameSync(temporary, this.file);
 			return undefined;
