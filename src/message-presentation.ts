@@ -32,6 +32,7 @@ export interface TerminalOutputSummary {
 	ok: boolean;
 	text: string;
 	elapsedMs?: number;
+	structuredResult?: import("./result-view.ts").StructuredResultDescriptor;
 	usage: { input: number; output: number; cost: number; tools: number };
 }
 
@@ -46,6 +47,7 @@ export function terminalOutputSummary(result: RunResult, snapshot?: CallSnapshot
 		return {
 			ok: result.ok,
 			text,
+			...(result.structuredResult ? { structuredResult: result.structuredResult } : {}),
 			usage: {
 				input: result.usage.input,
 				output: result.usage.output,
@@ -67,6 +69,7 @@ export function terminalOutputSummary(result: RunResult, snapshot?: CallSnapshot
 		ok: result.ok,
 		text,
 		elapsedMs: snapshot.durationMs,
+		...(result.structuredResult ? { structuredResult: result.structuredResult } : {}),
 		usage: { ...usage, cost: snapshot.totalCost },
 	};
 }

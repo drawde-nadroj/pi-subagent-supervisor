@@ -1,4 +1,4 @@
-import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
+import { getMarkdownTheme, keyText } from "@earendil-works/pi-coding-agent";
 import {
 	Markdown,
 	truncateToWidth,
@@ -8,6 +8,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { colorize } from "./colors.ts";
 import { type PersonaDescriptor } from "./persona.ts";
+import { isSupportedReturnsSchema, resultSections, structuredViewHint, type StructuredResultDescriptor } from "./result-view.ts";
 import { RESULT_CAP_BYTES, type CallSnapshot, type RunNodeSnapshot, type RunNodeStatus } from "./registry.ts";
 import {
 	agentContentPrefix,
@@ -364,6 +365,18 @@ function normalizeActivity(value: unknown): RunNodeSnapshot["activity"] | undefi
 	};
 }
 
+function normalizeStructuredResult(value: unknown): StructuredResultDescriptor | undefined {
+	if (!isRecord(value) || value.schemaVersion !== 1 || (value.view !== "readable" && value.view !== "exact")) return undefined;
+	if (value.kind === "preset" && (value.preset === "Findings" || value.preset === "Review" || value.preset === "Decision"))
+		return { schemaVersion: 1, view: value.view, kind: "preset", preset: value.preset };
+	if (value.kind !== "custom" || !isSupportedReturnsSchema(value.schema)) return undefined;
+	try {
+		const descriptor: StructuredResultDescriptor = { schemaVersion: 1, view: value.view, kind: "custom", schema: structuredClone(value.schema) };
+		if (Buffer.byteLength(JSON.stringify(descriptor), "utf8") > RESULT_CAP_BYTES) return undefined;
+		return descriptor;
+	} catch { return undefined; }
+}
+
 function normalizeNode(value: unknown, seen: Set<object>): RunNodeSnapshot | undefined {
 	if (!isRecord(value) || seen.has(value)) return undefined;
 	seen.add(value);
@@ -383,6 +396,7 @@ function normalizeNode(value: unknown, seen: Set<object>): RunNodeSnapshot | und
 	const model = optionalString(value.model);
 	const finalText = optionalString(value.finalText);
 	const error = optionalString(value.error);
+	const structuredResult = value.structuredResult === undefined ? undefined : normalizeStructuredResult(value.structuredResult);
 
 	if (
 		id === undefined || callId === undefined
@@ -436,6 +450,7 @@ function normalizeNode(value: unknown, seen: Set<object>): RunNodeSnapshot | und
 		activity,
 		toolLog: [...value.toolLog],
 		finalText,
+		structuredResult,
 		error,
 		ownCost,
 		subtreeCost,
@@ -617,13 +632,18 @@ function renderCompactNode(
 	return lines;
 }
 
-function terminalSections(node: RunNodeSnapshot): Array<{ label: "Error" | "Returned"; text: string }> {
+function terminalSections(node: RunNodeSnapshot, expanded = false): Array<{ label: string; text: string; format: "markdown" | "literal" }> {
 	const error = node.error?.trim();
 	const returned = node.finalText?.trim();
-	const sections: Array<{ label: "Error" | "Returned"; text: string }> = [];
-	if (error) sections.push({ label: "Error", text: error });
-	if (returned && returned !== error) sections.push({ label: "Returned", text: returned });
-	if (sections.length === 0) sections.push({ label: "Returned", text: "(no output)" });
+	const sections: Array<{ label: string; text: string; format: "markdown" | "literal" }> = [];
+	if (error) sections.push({ label: "Error", text: error, format: "markdown" });
+	if (returned && returned !== error) {
+		const projected = resultSections(returned, node.structuredResult, expanded);
+		const hasAlternate = resultSections(returned, node.structuredResult, true).length > 1;
+		sections.push(...projected.map(({ label, text, format }) => ({ label: projected.length > 1 ? label : "Returned", text, format })));
+		if (hasAlternate) sections.push({ label: "View", text: structuredViewHint(keyText("app.tools.expand"), expanded), format: "literal" });
+	}
+	if (sections.length === 0) sections.push({ label: "Returned", text: "(no output)", format: "literal" });
 	return sections;
 }
 
@@ -638,9 +658,9 @@ function renderTerminalAnswer(
 	// spaces belong to the current node, not its ancestors.
 	const ancestorRails = agentContentPrefix(node, position, false).slice(0, -3);
 	const prefix = (indent: number): string => boundedContentPrefix(ancestorRails, width, indent);
-	return terminalSections(node).flatMap(({ label, text }) => [
+	return terminalSections(node).flatMap(({ label, text, format }) => [
 		...wrapStyled(label, theme, label === "Error" ? "error" : "muted", width, prefix(2)),
-		...renderMarkdown(text, prefix(4), width),
+		...(format === "literal" ? wrapStyled(text, theme, "text", width, prefix(4)) : renderMarkdown(text, prefix(4), width)),
 	]);
 }
 
@@ -739,9 +759,9 @@ function renderExpandedNode(
 	}
 
 	if (includeAnswer && node.status !== "active" && node.status !== "dormant") {
-		for (const { label, text } of terminalSections(node)) {
+		for (const { label, text, format } of terminalSections(node, true)) {
 			lines.push(section(label));
-			lines.push(...renderMarkdown(text, contentPrefix(), width));
+			lines.push(...(format === "literal" ? wrapStyled(text, theme, "text", width, contentPrefix()) : renderMarkdown(text, contentPrefix(), width)));
 		}
 	}
 	lines.push(section("Details"));

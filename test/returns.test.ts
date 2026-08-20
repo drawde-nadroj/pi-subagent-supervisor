@@ -51,3 +51,12 @@ console.log("returns unit tests passed");
 
 assert.ok(validateReturns({ type: "string", enum: ["ok"] }, 1).some((error) => error.includes("expected string")));
 assert.ok(validateReturns({ type: "string", enum: ["ok"] }, "bad").some((error) => error.includes("expected one of")));
+
+import { describeStructuredResult, presentResultText } from "../src/result-view.ts";
+const viewSchema = { type: "object", required: ["verdict"], properties: { verdict: { type: "string" } } } as const;
+const canonicalViewText = 'Prose stays canonical.\n```json\n{"verdict":"approve"}\n```';
+const readableDescriptor = describeStructuredResult(viewSchema, canonicalViewText, "readable");
+assert.deepEqual(readableDescriptor, { schemaVersion: 1, view: "readable", kind: "custom", schema: viewSchema });
+assert.equal(presentResultText(canonicalViewText, readableDescriptor), "**verdict:** approve");
+assert.equal(presentResultText(canonicalViewText, { ...readableDescriptor!, view: "exact" }), JSON.stringify({ verdict: "approve" }, null, 2));
+assert.equal(describeStructuredResult(viewSchema, '```json\n{}\n```', "readable"), undefined, "invalid returns never receive presentation metadata");

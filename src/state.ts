@@ -11,6 +11,7 @@ export class SubagentState {
 	private keybinds: Record<string, string> = {};
 	/** Enforce agents' `returns:` schemas (instruction + validation + repair turn). */
 	private structuredReturns = true;
+	private resultView: import("./result-view.ts").ResultView = "readable";
 	/** Reveal routine subagent prices in UI surfaces. History is always priced. */
 	private showCosts = false;
 	/** Persist completed-run history for stats. Defaults on for compatibility. */
@@ -26,6 +27,7 @@ export class SubagentState {
 				for (const [k, v] of Object.entries(data.keybinds)) if (typeof v === "string") this.keybinds[k] = v;
 			}
 			if (typeof data.structuredReturns === "boolean") this.structuredReturns = data.structuredReturns;
+			if (data.resultView === "readable" || data.resultView === "exact") this.resultView = data.resultView;
 			if (typeof data.showCosts === "boolean") this.showCosts = data.showCosts;
 			if (typeof data.historyEnabled === "boolean") this.historyEnabled = data.historyEnabled;
 		} catch {
@@ -40,6 +42,18 @@ export class SubagentState {
 	setStructuredReturns(on: boolean): void {
 		this.structuredReturns = on;
 		this.save();
+		this.notify();
+	}
+
+	getResultView(): import("./result-view.ts").ResultView { return this.resultView; }
+	setResultView(view: import("./result-view.ts").ResultView): void {
+		const previous = this.resultView;
+		this.resultView = view;
+		const error = this.save();
+		if (error) {
+			this.resultView = previous;
+			throw error;
+		}
 		this.notify();
 	}
 
@@ -96,7 +110,7 @@ export class SubagentState {
 		try {
 			fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
 			fs.chmodSync(directory, 0o700);
-			fs.writeFileSync(temporary, JSON.stringify({ keybinds: this.keybinds, structuredReturns: this.structuredReturns, showCosts: this.showCosts, historyEnabled: this.historyEnabled }, null, 2), { encoding: "utf-8", mode: 0o600, flag: "wx" });
+			fs.writeFileSync(temporary, JSON.stringify({ keybinds: this.keybinds, structuredReturns: this.structuredReturns, ...(this.resultView === "readable" ? {} : { resultView: this.resultView }), showCosts: this.showCosts, historyEnabled: this.historyEnabled }, null, 2), { encoding: "utf-8", mode: 0o600, flag: "wx" });
 			fs.chmodSync(temporary, 0o600);
 			fs.renameSync(temporary, this.file);
 			return undefined;

@@ -69,6 +69,8 @@ export interface RunResult {
 	/** The actual provider/model used by the final attempt. */
 	model?: string;
 	error?: string;
+	/** TUI-only structured presentation; finalText remains canonical. */
+	structuredResult?: import("./result-view.ts").StructuredResultDescriptor;
 }
 
 export interface RunHandle {

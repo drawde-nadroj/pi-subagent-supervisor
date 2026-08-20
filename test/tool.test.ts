@@ -6,6 +6,7 @@ import type { AgentConfig } from "../src/agents.ts";
 import { emptyUsage, type RunEvent, type RunHandle, type RunResult } from "../src/engine.ts";
 import { terminalOutputSummary } from "../src/message-presentation.ts";
 import { RESULT_CAP_BYTES, RESULT_TRUNCATION_MARKER, RunRegistry, type CallSnapshot } from "../src/registry.ts";
+import { formatReturnsJson } from "../src/returns.ts";
 import { detailsFromSnapshot, dispatchParallel, dispatchSequence, dispatchSingle, formatParallelResult, registerSubagentTool, type DispatchDeps } from "../src/tool.ts";
 
 assert.equal(formatParallelResult(["worker", "worker"], [
@@ -40,6 +41,24 @@ const handle = (result: RunResult, onEvent: (event: RunEvent) => void): Promise<
 	onEvent({ type: "usage", usage: result.usage, contextPercent: result.contextPercent });
 	return Promise.resolve({ promise: Promise.resolve(result), abort() {} });
 };
+
+// Metadata is derived from the final canonical text only when structured returns are enabled and valid.
+{
+	const schema = { type: "object", required: ["verdict"], properties: { verdict: { type: "string" } } } as const;
+	for (const scenario of [
+		{ name: "valid", enabled: true, text: 'context\n```json\n{"verdict":"approve"}\n```', metadata: true },
+		{ name: "invalid", enabled: true, text: 'context\n```json\n{}\n```', metadata: false },
+		{ name: "disabled", enabled: false, text: 'context\n```json\n{"verdict":"approve"}\n```', metadata: false },
+	] as const) {
+		const configured = { ...agent(`metadata-${scenario.name}`), returns: schema };
+		const result = await dispatchSingle({
+			registry: new RunRegistry(), getCtx: () => baseCtx, structuredReturns: () => scenario.enabled,
+			executeAgent: async (args) => handle({ ok: true, finalText: scenario.text, usage: emptyUsage(), contextPercent: null }, args.onEvent),
+		}, configured, "return metadata");
+		assert.equal(result.finalText, scenario.enabled ? formatReturnsJson(scenario.text) : scenario.text, "metadata derivation preserves the established canonical finalText policy");
+		assert.equal(result.structuredResult !== undefined, scenario.metadata, `${scenario.name} metadata boundary`);
+	}
+}
 
 for (const ok of [true, false]) {
 	const oversized = "x".repeat(RESULT_CAP_BYTES + 1);

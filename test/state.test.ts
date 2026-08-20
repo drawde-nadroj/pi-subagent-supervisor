@@ -8,6 +8,7 @@ const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "subagent-state-"))
 fs.writeFileSync(file, JSON.stringify({ keybinds: { edit: "e" }, structuredReturns: false }), "utf8");
 const state = new SubagentState(file);
 assert.equal(state.getShowCosts(), false, "old state files default to hidden costs");
+assert.equal(state.getResultView(), "readable", "old state files receive the readable structured-result default");
 assert.equal(state.getHistoryEnabled(), true, "old state files migrate with history enabled");
 let changes = 0;
 state.onChange(() => changes++);
@@ -16,6 +17,11 @@ assert.equal(state.getShowCosts(), true);
 assert.equal(changes, 1);
 assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), { keybinds: { edit: "e" }, structuredReturns: false, showCosts: true, historyEnabled: true });
 assert.equal(new SubagentState(file).getShowCosts(), true);
+state.setResultView("exact");
+assert.equal(state.getResultView(), "exact");
+assert.equal(new SubagentState(file).getResultView(), "exact", "structured-result view persists");
+state.setResultView("readable");
+assert.equal(new SubagentState(file).getResultView(), "readable", "resetting to the default persists by omission");
 
 state.setHistoryEnabled(false);
 assert.equal(state.getHistoryEnabled(), false);
@@ -30,6 +36,8 @@ fs.writeFileSync(blockedParent, "block");
 const blockedState = new SubagentState(path.join(blockedParent, "state.json"));
 assert.throws(() => blockedState.setHistoryEnabled(false));
 assert.equal(blockedState.getHistoryEnabled(), true, "failed persistence leaves the effective preference unchanged");
+assert.throws(() => blockedState.setResultView("exact"));
+assert.equal(blockedState.getResultView(), "readable", "failed persistence rolls back the structured-result preference");
 fs.rmSync(blockedRoot, { recursive: true, force: true });
 
 const commitFailureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "subagent-state-commit-"));

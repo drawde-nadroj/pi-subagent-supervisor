@@ -87,6 +87,7 @@ Each file is Markdown with YAML frontmatter and a body used as the child system 
 - `conventions`: inherit global and path-scoped `AGENTS.md` conventions
 - `spawn`: roles this child may delegate to
 - `returns`: supported JSON-schema subset for the final response
+- `resultView`: optional `readable` or `exact` TUI presentation override for valid structured returns
 
 Compatibility aliases remain supported: `fallbackModels` for `fallback`, `fork` for `conventions`, and `advertise` (`always`/`judgment`/`never`) for `auto`. Claude agent tool names are also accepted in the Claude discovery layer.
 
@@ -100,11 +101,13 @@ New and existing user definitions use the same staged workbench: Identity, Routi
 
 Children do not receive the parent transcript, extensions, skills, or the normal context-file stack. `conventions: true` adds only global and path-scoped `AGENTS.md` files. Models inherit by default; fallback models run only after quota, authentication, network, availability, or similar provider errors—not ordinary task failure.
 
-Child output is summarized back to the parent. A `returns` schema adds validation and one repair turn when enabled. Nested delegation is depth-limited; nested parallel calls require every target to be read-only. Parallel and nested work can increase usage quickly.
+Child output is returned to the parent. A `returns` schema adds validation and one repair turn when enabled. Structured results default to **Readable** presentation. Each agent may inherit the global preference or override it with **Readable** or **Exact JSON**. Exact JSON is `JSON.stringify` of the validated extracted value; metadata or extraction failures fall back to raw final text. Pi's configured tool-output expansion shortcut (`Ctrl+O` by default) shows both views; expansion is global, not a focusable per-row control. Presentation and persisted render surfaces have a 50 KiB cap, while canonical parent-facing tool content, substitutions, nested returns, result/error semantics, and `RunResult.finalText` remain unchanged.
+
+Nested delegation is depth-limited; nested parallel calls require every target to be read-only. A parent can appear waiting while unrelated parallel branches continue; this is observable coordination state, not itself a hang or timeout. Parallel and nested work can increase usage quickly.
 
 ## Local data and privacy
 
-Preferences and history live outside the installed package under `~/.pi/agent/pi-subagents/` (or the configured Pi agent directory). `state.json` stores preferences; `runs.jsonl` stores local task summaries, failure summaries, working directories, token/tool usage, and cost. Cost values are provider-reported estimates, not billing records. On first startup after upgrading from package-local storage, either legacy file is copied here if no destination file exists. Parent directories are created as needed and files use private permissions where supported. Package updates and uninstalling the extension do not wipe these files. Nothing in this extension uploads the history, but model providers still receive tasks executed with their models.
+Preferences and history live outside the installed package under `~/.pi/agent/pi-subagents/` (or the configured Pi agent directory). `state.json` stores preferences. `runs.jsonl` is run-history telemetry only: local task summaries, failure summaries, working directories, token/tool usage, and cost. It does not store parsed structured-result values. Cost values are provider-reported estimates, not billing records. On first startup after upgrading from package-local storage, either legacy file is copied here if no destination file exists. Parent directories are created as needed and files use private permissions where supported. Package updates and uninstalling the extension do not wipe these files. Nothing in this extension uploads the history, but model providers still receive tasks executed with their models.
 
 Use `/agents history off` to stop new history while retaining existing entries, or `/agents history clear` to delete only `runs.jsonl`. To remove all extension data after uninstalling, delete the `pi-subagents` data directory manually.
 

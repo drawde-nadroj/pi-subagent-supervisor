@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { initTheme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import { emptyUsage } from "../src/engine.ts";
 import { formatLiveSurface } from "../src/live-surface.ts";
-import type { CallSnapshot, RunNodeSnapshot, RunNodeStatus } from "../src/registry.ts";
+import { RESULT_CAP_BYTES, type CallSnapshot, type RunNodeSnapshot, type RunNodeStatus } from "../src/registry.ts";
 import { activityForRole, formatAgentIdentityLine } from "../src/tree-presentation.ts";
 import {
 	normalizeV2Details,
@@ -14,6 +15,7 @@ import {
 	type SubagentToolDetailsV2,
 } from "../src/tool-renderer.ts";
 
+initTheme(undefined, false);
 const theme: SubagentRendererTheme = { fg: (_color, text) => text, bold: (text) => text };
 assert.deepEqual(
 	["debugger", "oracle", "planner", "reviewer", "scout", "test-writer", "worker", "tldraw-offline", "custom"].map(activityForRole),
@@ -414,9 +416,35 @@ const narrowNestedLines = render(details([deep]), { width: 20 }).all;
 assert.match(plain(narrowNestedLines).replace(/\s/g, ""), /DEEPLYNESTEDANSWER/, "deep answers remain visible at narrow widths");
 for (const line of narrowNestedLines) assert.ok(visibleWidth(line) <= 20, `${visibleWidth(line)} > 20`);
 
+// Exact JSON is rendered literally rather than interpreted as Markdown.
+const exactJsonDetails = details([node({
+	finalText: '```json\n{"answer":"**literal** and _unchanged_"}\n```',
+	structuredResult: { schemaVersion: 1, view: "exact", kind: "custom", schema: { type: "object", properties: { answer: { type: "string" } } } },
+})]);
+const exactJson = render(exactJsonDetails);
+assert.match(plain(exactJson.body), /\*\*literal\*\* and _unchanged_/, "Exact JSON retains Markdown punctuation");
+assert.match(plain(exactJson.body), /shows both structured result views/, "collapsed structured output advertises Pi's configured expansion action");
+const expandedExactJson = plain(render(exactJsonDetails, { expanded: true }).body);
+assert.ok(expandedExactJson.indexOf("Exact JSON") < expandedExactJson.indexOf("Readable"), "expanded output keeps the persisted preferred view first");
+assert.match(expandedExactJson, /collapses structured result views/);
+
 // Stored snapshots still validate defensively and HTML-export's result-owned header remains correct.
 const stored = structuredClone(details([node()])) as any;
 assert.ok(normalizeV2Details(stored));
+stored.call.roots[0].structuredResult = { schemaVersion: 99, view: "broken", schema: null };
+const withoutMalformedMetadata = normalizeV2Details(stored);
+assert.ok(withoutMalformedMetadata, "malformed optional descriptors do not discard an otherwise valid V2 row");
+assert.equal(withoutMalformedMetadata.call.roots[0].structuredResult, undefined);
+const descriptorAt = (bytes: number) => {
+	const base = { schemaVersion: 1, view: "readable", kind: "custom", schema: { type: "object", properties: { x: { enum: [""] } } } } as any;
+	const overhead = Buffer.byteLength(JSON.stringify(base), "utf8");
+	base.schema.properties.x.enum[0] = "x".repeat(bytes - overhead);
+	return base;
+};
+stored.call.roots[0].structuredResult = descriptorAt(RESULT_CAP_BYTES);
+assert.ok(normalizeV2Details(stored)?.call.roots[0].structuredResult, "a descriptor exactly at the cap is retained");
+stored.call.roots[0].structuredResult = descriptorAt(RESULT_CAP_BYTES + 1);
+assert.equal(normalizeV2Details(stored)?.call.roots[0].structuredResult, undefined, "an over-cap descriptor fails closed without discarding the row");
 stored.call.roots[0].usage.cost = "bad";
 assert.equal(normalizeV2Details(stored), undefined);
 const exportState: SubagentRendererState = {};

@@ -15,7 +15,7 @@ export type WritableAgent = Pick<
 	AgentConfig,
 	"name" | "displayName" | "description" | "model" | "thinking" | "tools" | "readonly" | "color" | "conventions" | "spawn" | "systemPrompt"
 > &
-	Partial<Pick<AgentConfig, "auto" | "fallback" | "returns">>;
+	Partial<Pick<AgentConfig, "auto" | "fallback" | "returns" | "resultView">>;
 
 export type AgentMutationAction = "toggle" | "edit" | "delete";
 
@@ -45,6 +45,7 @@ export function serializeAgent(a: WritableAgent): string {
 	lines.push(`color: ${yamlString(a.color)}`);
 	if (a.conventions) lines.push("conventions: true");
 	if (a.returns) lines.push(`returns: ${JSON.stringify(a.returns)}`);
+	if (a.returns && a.resultView) lines.push(`resultView: ${a.resultView}`);
 	if (a.spawn && a.spawn.length > 0) lines.push(`spawn: [${a.spawn.map(yamlString).join(", ")}]`);
 	lines.push("---", "", a.systemPrompt.trim(), "");
 	return lines.join("\n");

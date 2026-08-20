@@ -1,6 +1,8 @@
 import type { WritableAgent } from "./agent-writer.ts";
 import type { AgentConfig } from "./agents.ts";
 import type { ReturnsSchema } from "./returns.ts";
+export { RETURNS_PRESETS } from "./result-view.ts";
+import { RETURNS_PRESETS } from "./result-view.ts";
 
 export type AccessMode = "unset" | "readonly" | "writable";
 export type ToolMode = "defaults" | "custom" | "none";
@@ -14,6 +16,7 @@ export interface AgentDraft {
 	fallback: string[];
 	auto: boolean;
 	returns?: ReturnsSchema;
+	resultView?: import("./result-view.ts").ResultView;
 	thinking: string;
 	access: AccessMode;
 	toolMode: ToolMode;
@@ -25,14 +28,14 @@ export interface AgentDraft {
 }
 
 export function createAgentDraft(): AgentDraft {
-	return { name: "", displayName: "", description: "", model: "", fallback: [], auto: true, thinking: "", access: "unset", toolMode: "defaults", tools: [], color: "cyan", conventions: false, spawn: [], systemPrompt: "" };
+	return { name: "", displayName: "", description: "", model: "", fallback: [], auto: true, resultView: undefined, thinking: "", access: "unset", toolMode: "defaults", tools: [], color: "cyan", conventions: false, spawn: [], systemPrompt: "" };
 }
 
 export function draftFromAgent(agent: AgentConfig): AgentDraft {
 	const access: AccessMode = agent.readonly ? "readonly" : "writable";
 	return {
 		name: agent.name, displayName: agent.displayName ?? "", description: agent.description, model: agent.model ?? "", fallback: [...agent.fallback], auto: agent.auto,
-		returns: agent.returns ? structuredClone(agent.returns) : undefined, thinking: agent.thinking ?? "", access,
+		returns: agent.returns ? structuredClone(agent.returns) : undefined, resultView: agent.resultView, thinking: agent.thinking ?? "", access,
 		toolMode: agent.tools === undefined ? "defaults" : agent.tools.length === 0 ? "none" : "custom", tools: [...(agent.tools ?? [])], color: agent.color,
 		conventions: agent.conventions, spawn: [...agent.spawn], systemPrompt: agent.systemPrompt,
 	};
@@ -45,7 +48,7 @@ export function draftToWritable(draft: AgentDraft): WritableAgent {
 	if (draft.toolMode === "custom" && draft.tools.length === 0) throw new Error("Custom tool access requires at least one tool.");
 	return {
 		name: draft.name.trim(), displayName: draft.displayName.trim() || undefined, description: draft.description.trim(), model: draft.model.trim() || undefined,
-		fallback: [...draft.fallback], auto: draft.auto, returns: draft.returns ? structuredClone(draft.returns) : undefined, thinking: draft.thinking.trim() || undefined,
+		fallback: [...draft.fallback], auto: draft.auto, returns: draft.returns ? structuredClone(draft.returns) : undefined, ...(draft.returns && draft.resultView ? { resultView: draft.resultView } : {}), thinking: draft.thinking.trim() || undefined,
 		tools: draft.toolMode === "custom" ? [...draft.tools] : draft.toolMode === "none" ? [] : undefined,
 		readonly: draft.access === "readonly", color: draft.color, conventions: draft.conventions,
 		spawn: [...draft.spawn], systemPrompt: draft.systemPrompt.trim(),
@@ -114,9 +117,3 @@ export function parseCustomReturns(text: string): { schema?: ReturnsSchema; erro
 	const errors = validateReturnsSchema(parsed);
 	return errors.length ? { error: errors.join("; ") } : { schema: parsed as ReturnsSchema };
 }
-
-export const RETURNS_PRESETS: ReadonlyArray<{ name: "Findings" | "Review" | "Decision"; schema: ReturnsSchema }> = [
-	{ name: "Findings", schema: { type: "object", required: ["findings"], properties: { findings: { type: "array", items: { type: "object", required: ["path", "note"], properties: { path: { type: "string" }, line: { type: "number" }, note: { type: "string" } } } }, open_questions: { type: "array", items: { type: "string" } } } } },
-	{ name: "Review", schema: { type: "object", required: ["verdict", "coverage", "findings"], properties: { verdict: { enum: ["approve", "fix"] }, coverage: { type: "string" }, findings: { type: "array", items: { type: "object", required: ["path", "line", "severity", "summary", "fix"], properties: { path: { type: "string" }, line: { type: "number" }, severity: { enum: ["P0", "P1", "P2", "P3"] }, summary: { type: "string" }, fix: { type: "string" } } } } } } },
-	{ name: "Decision", schema: { type: "object", required: ["decision", "evidence", "risks", "recommendation"], properties: { decision: { type: "string" }, evidence: { type: "array", items: { type: "string" } }, risks: { type: "array", items: { type: "string" } }, recommendation: { type: "string" } } } },
-];

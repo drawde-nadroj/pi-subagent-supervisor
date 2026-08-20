@@ -81,3 +81,14 @@ test("schema enums honor declared types and reject unsupported enum types", () =
 test("Decision preset has the exact decision contract", () => {
 	assert.deepEqual(RETURNS_PRESETS[2].schema, { type: "object", required: ["decision", "evidence", "risks", "recommendation"], properties: { decision: { type: "string" }, evidence: { type: "array", items: { type: "string" } }, risks: { type: "array", items: { type: "string" } }, recommendation: { type: "string" } } });
 });
+
+test("result-view overrides are omitted without returns and reset cleanly", () => {
+	const draft = createAgentDraft();
+	draft.name = "worker"; draft.description = "work"; draft.systemPrompt = "work"; draft.access = "writable";
+	draft.resultView = "exact";
+	assert.equal(draftToWritable(draft).resultView, undefined, "a view has no meaning when structured returns are disabled");
+	draft.returns = structuredClone(RETURNS_PRESETS[0]!.schema);
+	assert.equal(draftToWritable(draft).resultView, "exact");
+	draft.resultView = undefined;
+	assert.equal(draftToWritable(draft).resultView, undefined, "clearing the override restores the global preference");
+});

@@ -64,7 +64,7 @@ const STAGE_ROWS: readonly (readonly string[])[] = [
 	["auto", "description"],
 	["access", "model", "fallback", "thinking", "conventions", "spawn"],
 	["systemPrompt"],
-	["output"],
+	["output", "resultView"],
 	["save"],
 ];
 
@@ -131,6 +131,7 @@ function rowValue(field: string, draft: AgentDraft, mode: WorkbenchMode): string
 	if (field === "spawn") return draft.spawn.join(", ") || "none";
 	if (field === "systemPrompt") return draft.systemPrompt || "(required)";
 	if (field === "output") return workbenchOutputName(draft);
+	if (field === "resultView") return draft.returns ? (draft.resultView === "readable" ? "Readable" : draft.resultView === "exact" ? "Exact JSON" : "Inherit global") : "Unavailable (requires output schema)";
 	return `Review and ${workbenchLabels(mode).committed}`;
 }
 
@@ -153,7 +154,7 @@ export function reviewPreview(draft: AgentDraft, width: number, mode: WorkbenchM
 		`Permissions: ${permissions}`,
 		`Model: ${draft.model.trim() || "inherited"}; fallback ${draft.fallback.join(" → ") || "none"}; thinking ${draft.thinking.trim() || "inherited"}`,
 		`Delegation: conventions ${draft.conventions ? "on" : "off"}; spawn ${draft.spawn.join(", ") || "none"}`,
-		`Output: ${workbenchOutputName(draft)}`,
+		`Output: ${workbenchOutputName(draft)}${draft.resultView ? `; view ${draft.resultView}` : ""}`,
 		...(writable
 			? ["Serialized definition:", ...serializeAgent(writable).trimEnd().split("\n").map((line) => `  ${line}`)]
 			: ["Serialized definition unavailable until valid tool access is selected."]),
@@ -165,7 +166,7 @@ const FIELD_LABELS: Record<string, string> = {
 	name: "Name", displayName: "Display Name", color: "Color", auto: "Auto routing",
 	description: "Description", access: "Tool access", model: "Model", fallback: "Fallback",
 	thinking: "Thinking", conventions: "Conventions", spawn: "Spawn", systemPrompt: "System Prompt",
-	output: "Output", save: "Save",
+	output: "Output", resultView: "Result view", save: "Save",
 };
 
 export function renderWorkbench(draft: AgentDraft, state: WorkbenchState, width: number, mode: WorkbenchMode = { kind: "create" }): string[] {
@@ -348,10 +349,19 @@ async function editField(ctx: ExtensionContext, draft: AgentDraft, field: string
 		const value = await pickMulti(ctx, "Spawn targets", mergeSavedChoices(roster, draft.spawn), draft.spawn);
 		if (value === undefined) return false;
 		draft.spawn = value;
+	} else if (field === "resultView") {
+		if (!draft.returns) {
+			draft.resultView = undefined;
+			ctx.ui.notify("Result view is unavailable until an output schema is selected.", "info");
+			return false;
+		}
+		const choice = await ctx.ui.select("Structured result view", ["Inherit global", "Readable", "Exact JSON"]);
+		if (!choice) return false;
+		draft.resultView = choice === "Readable" ? "readable" : choice === "Exact JSON" ? "exact" : undefined;
 	} else if (field === "output") {
 		const choice = await ctx.ui.select("Output", ["None", "Findings", "Review", "Decision", "Custom"]);
 		if (!choice) return false;
-		if (choice === "None") draft.returns = undefined;
+		if (choice === "None") { draft.returns = undefined; draft.resultView = undefined; }
 		else if (choice !== "Custom") draft.returns = structuredClone(RETURNS_PRESETS.find((preset) => preset.name === choice)!.schema);
 		else {
 			const text = await ctx.ui.editor("Custom output schema — supported JSON Schema subset", draft.returns ? JSON.stringify(draft.returns, null, 2) : "{\n  \"type\": \"object\",\n  \"properties\": {}\n}");

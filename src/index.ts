@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Container, isKeyRelease, Markdown, matchesKey, Text, truncateToWidth, type Component } from "@earendil-works/pi-tui";
-import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
+import { getMarkdownTheme, keyText } from "@earendil-works/pi-coding-agent";
 import { appendDebuggerNudge, isTestOrBuildCommand } from "./backstops.ts";
 import { agentDisplayName, discoverAgents } from "./agents.ts";
 import { openDashboard } from "./dashboard.ts";
@@ -9,6 +9,7 @@ import { buildActiveAgentsBlock } from "./guidance.ts";
 import { executeHistoryCommand, parseHistoryCommand } from "./history.ts";
 import { Keymap } from "./keymap.ts";
 import { bridgeHerdrWorkingLease, LiveSurfaceCoordinator } from "./live-surface.ts";
+import { resultSections, structuredViewHint } from "./result-view.ts";
 import { presentMessageIdentity, terminalOutputSummary, type StoredMessageIdentity } from "./message-presentation.ts";
 import { RunRegistry, type CallSnapshot } from "./registry.ts";
 import { SubagentState } from "./state.ts";
@@ -21,6 +22,7 @@ interface OutputDetails extends StoredMessageIdentity {
 	elapsedMs?: number;
 	task?: string;
 	text: string;
+	structuredResult?: import("./result-view.ts").StructuredResultDescriptor;
 	usage: { input: number; output: number; cost: number; tools?: number };
 }
 
@@ -65,7 +67,7 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	// Render a dispatched run's result into the transcript (for /<name> and sequences).
-	pi.registerMessageRenderer<OutputDetails>("subagent-output", (msg, _opts, theme) => {
+	pi.registerMessageRenderer<OutputDetails>("subagent-output", (msg, opts, theme) => {
 		const d = msg.details;
 		if (!d) return undefined;
 		const identity = presentMessageIdentity(d);
@@ -82,8 +84,17 @@ export default function (pi: ExtensionAPI) {
 			),
 		);
 		if (d.task) c.addChild(new CompactTaskLine(d.task, (text) => theme.fg("dim", text)));
-		// Agents answer in markdown — render it instead of dumping raw text.
-		c.addChild(new Markdown(d.text || "(no output)", 0, 0, getMarkdownTheme()));
+		const sections = resultSections(d.text, d.structuredResult, opts.expanded);
+		const hasAlternate = resultSections(d.text, d.structuredResult, true).length > 1;
+		for (const section of sections) {
+			if (sections.length > 1) c.addChild(new Text(theme.fg("dim", theme.bold(section.label)), 0, 0));
+			c.addChild(section.format === "literal"
+				? new Text(section.text || "(no output)", 0, 0)
+				: new Markdown(section.text || "(no output)", 0, 0, getMarkdownTheme()));
+		}
+		if (hasAlternate) {
+			c.addChild(new Text(theme.fg("dim", structuredViewHint(keyText("app.tools.expand"), opts.expanded)), 0, 0));
+		}
 		return c;
 	});
 
@@ -110,6 +121,7 @@ export default function (pi: ExtensionAPI) {
 				elapsedMs: summary.elapsedMs,
 				task: terminalRoot?.task,
 				text: summary.text || "(no output)",
+				structuredResult: summary.structuredResult,
 				usage: summary.usage,
 			},
 		});
@@ -154,6 +166,7 @@ export default function (pi: ExtensionAPI) {
 		showOutput: (agent, result, snapshot) => showOutput(agent, result, { snapshot }),
 		structuredReturns: () => state.getStructuredReturns(),
 		showCosts: () => state.getShowCosts(),
+		resultView: () => state.getResultView(),
 		liveSurface,
 	};
 

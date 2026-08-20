@@ -45,6 +45,7 @@ export interface RunRecord {
 	lastText?: string;
 	toolLog: string[];
 	finalText?: string;
+	structuredResult?: import("./result-view.ts").StructuredResultDescriptor;
 	error?: string;
 	cwd?: string;
 	mode: RunMode;
@@ -75,6 +76,7 @@ export interface RunNodeSnapshot {
 	activity: RunActivity;
 	toolLog: string[];
 	finalText?: string;
+	structuredResult?: import("./result-view.ts").StructuredResultDescriptor;
 	error?: string;
 	ownCost: number;
 	subtreeCost: number;
@@ -442,6 +444,7 @@ export class RunRegistry {
 		record.contextPercent = result.contextPercent;
 		record.model = result.model;
 		record.finalText = capResult(result.finalText);
+		record.structuredResult = result.structuredResult === undefined ? undefined : structuredClone(result.structuredResult);
 		record.error = record.status === "aborted" ? "aborted" : result.ok ? undefined : capResult(result.error ?? result.finalText);
 		record.endedAt = at;
 		record.activity = { type: "finished", at, text: record.error ?? record.finalText, tool: record.lastConcreteTool };
@@ -523,6 +526,7 @@ export class RunRegistry {
 			activity: { ...record.activity, tool: record.activity.tool ?? record.lastConcreteTool },
 			toolLog: [...record.toolLog],
 			finalText: record.finalText,
+			structuredResult: record.structuredResult === undefined ? undefined : structuredClone(record.structuredResult),
 			error: record.error,
 			ownCost,
 			subtreeCost: ownCost + children.reduce((sum, child) => sum + child.subtreeCost, 0),

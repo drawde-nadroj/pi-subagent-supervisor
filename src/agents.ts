@@ -36,6 +36,8 @@ export interface AgentConfig {
 	/** Optional JSON-schema subset the child's reply must end with (see returns.ts).
 	 * Gated by the structured-returns setting; validated with one repair turn. */
 	returns?: import("./returns.ts").ReturnsSchema;
+	/** Optional TUI presentation override for valid structured returns. */
+	resultView?: import("./result-view.ts").ResultView;
 	thinking?: string;
 	tools?: string[];
 	readonly: boolean;
@@ -64,6 +66,7 @@ interface RawFrontmatter {
 	fallbackModels?: string[] | string;
 	auto?: unknown;
 	returns?: unknown;
+	resultView?: unknown;
 	/** Legacy routing field: always/judgment → auto, never → manual. */
 	advertise?: unknown;
 	thinking?: string;
@@ -131,6 +134,7 @@ export function parseAgentFile(
 		fallback: asList(frontmatter.fallback ?? frontmatter.fallbackModels),
 		auto: asAuto(frontmatter.auto, frontmatter.advertise),
 		returns: frontmatter.returns && typeof frontmatter.returns === "object" && !Array.isArray(frontmatter.returns) ? (frontmatter.returns as import("./returns.ts").ReturnsSchema) : undefined,
+		resultView: frontmatter.returns && typeof frontmatter.returns === "object" && !Array.isArray(frontmatter.returns) && (frontmatter.resultView === "readable" || frontmatter.resultView === "exact") ? frontmatter.resultView : undefined,
 		thinking: frontmatter.thinking?.trim() || undefined,
 		tools: Object.hasOwn(frontmatter, "tools") ? tools : undefined,
 		readonly: asBool(frontmatter.readonly),

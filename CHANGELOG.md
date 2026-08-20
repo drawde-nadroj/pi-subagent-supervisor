@@ -11,9 +11,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Initial public beta of Pi Subagent Supervisor.
 - Isolated subagent execution, configurable agent definitions, nested runs, fallbacks, structured returns, and routing controls.
 - Dashboard, unified staged Create/Edit agent workbench, run history, cost reporting, and bundled agent roles.
+- Readable and exact structured-result views, including dedicated Findings, Review, and Decision presentations and a per-agent override.
 
 ### Changed
 
 - Existing agents now use the lossless AgentDraft workbench with bounded model, thinking, permission, delegation, and output controls; unavailable saved choices remain preserved.
+- Structured-result descriptors are versioned validation recipes; canonical child text remains authoritative and parsed values are never persisted.
 
 [Unreleased]: https://github.com/drawde-nadroj/pi-subagent-supervisor/commits/main

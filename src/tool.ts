@@ -6,6 +6,7 @@ import { createNestedPersona, createRootPersonas } from "./persona.ts";
 import type { LiveSurfaceCoordinator } from "./live-surface.ts";
 import { capResult, type CallHandle, type CallSnapshot, type LaunchSurface, type RunId, type RunNodeSnapshot, type RunRecord, type RunRegistry } from "./registry.ts";
 import { buildReturnsInstruction, checkReturns, formatReturnsJson } from "./returns.ts";
+import { describeStructuredResult, resolveResultView, type ResultView } from "./result-view.ts";
 import {
 	normalizeV2Details,
 	renderSubagentCall,
@@ -86,6 +87,8 @@ export interface DispatchDeps {
 	structuredReturns?: () => boolean;
 	/** Whether routine renderer surfaces should reveal prices. Default: hidden. */
 	showCosts?: () => boolean;
+	/** Global structured-result presentation default. */
+	resultView?: () => ResultView;
 	/** Sole clock/invalidation owner for active transcript projections. */
 	liveSurface?: Pick<LiveSurfaceCoordinator, "subscribeRenderer">;
 	/** Test seam at the real engine boundary; production uses runAgent. */
@@ -225,9 +228,14 @@ async function runTrackedNode(
 					error: error instanceof Error ? error.message : String(error),
 				};
 			}
+			const canonicalText = schema ? formatReturnsJson(attemptResult.finalText) : attemptResult.finalText;
+			const validStructured = schema && attemptResult.ok && checkReturns(schema, canonicalText) === null
+				? describeStructuredResult(schema, canonicalText, resolveResultView(agent.resultView, deps.resultView?.() ?? "readable"))
+				: undefined;
 			result = {
 				...attemptResult,
-				finalText: schema ? formatReturnsJson(attemptResult.finalText) : attemptResult.finalText,
+				finalText: canonicalText,
+				structuredResult: validStructured,
 				usage: addUsage(previousUsage, attemptResult.usage),
 			};
 			const aborted = options.signal?.aborted || /^aborted$/i.test(result.error ?? "");
