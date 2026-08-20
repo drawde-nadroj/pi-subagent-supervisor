@@ -94,7 +94,7 @@ Compatibility aliases remain supported: `fallbackModels` for `fallback`, `fork` 
 
 To disable automatic routing for a role, open `/agents`, select the role, press the configured Toggle key (`space` by default) to stage the change, then press the configured Confirm key twice (`Enter` by default) to apply it. Dashboard changes to `auto` are staged, not applied immediately: confirm the staged changes to write them, or cancel to leave disk unchanged. Package-managed bundled files are never changed: editing a bundled role or confirming its staged `auto` value creates a same-name user override under `~/.pi/agent/agents`. A bundled identity cannot be renamed in place; create a new role instead. Bundled roles cannot be deleted. Deleting a user override can reveal the bundled default beneath it.
 
-User definitions remain editable in the dashboard. Trusted project definitions are discovered and can be opened from the dashboard, but the dashboard does not edit, toggle, rename, or delete them; edit those source files externally. This keeps project-controlled paths outside the extension's write boundary. The user-agent editor supports role prompts, routing fields, model/fallback settings, tools, delegation, and returns schemas.
+New and existing user definitions use the same staged workbench: Identity, Routing, Capabilities, Instructions, Output, and Review. Existing values remain selected even when their model, thinking level, fallback, or spawn target is not currently available. Saving an edited bundled role creates a same-name user override; bundled identities cannot be renamed. User renames use collision-safe persistence. Trusted project definitions are visible in the dashboard but Edit is refused; change those source files externally.
 
 ## Execution details
 
@@ -110,7 +110,7 @@ Use `/agents history off` to stop new history while retaining existing entries, 
 
 ## Limitations
 
-Dashboard keys are remappable. The new-agent workbench stages Identity, Routing, Capabilities, Instructions, Output, and Review; it writes only after Review confirmation. Editor and picker sub-overlays still use their fixed default navigation keys.
+Dashboard keys are remappable. The shared Create/Edit workbench writes only after two Review confirmations; cancel discards its full draft. Editor and picker sub-overlays still use their fixed default navigation keys.
 
 ## Development
 

@@ -237,7 +237,7 @@ export default function (pi: ExtensionAPI) {
 				// Roster cost column mirrors the default `/agents stats` window (recent, not lifetime).
 				runStats: () => new Map(aggregateRunStats(filterRecentEntries(readRunLog(runLogPath), STATS_WINDOW_DAYS)).map((s) => [s.agent, s])),
 			});
-			// Pick up any agent created via the wizard so its /<name> command exists immediately.
+			// Pick up any agent created or renamed via the workbench so its /<name> command exists immediately.
 			registerAgentCommands(ctx);
 		},
 	});

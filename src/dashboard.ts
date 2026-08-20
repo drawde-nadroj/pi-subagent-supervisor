@@ -5,8 +5,7 @@ import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works
 import { agentDisplayName, type AgentConfig, discoverAgents, resolveChildToolNames } from "./agents.ts";
 import { agentMutationRefusal, deleteAgentFile, materializeUserOverride, updateAgentFile } from "./agent-writer.ts";
 import { colorDot, colorize } from "./colors.ts";
-import { openEditor } from "./dashboard-edit.ts";
-import { newAgentWizard } from "./wizard.ts";
+import { editAgentWorkbench, newAgentWorkbench } from "./workbench.ts";
 import { showPreferences } from "./settings.ts";
 import type { Keymap } from "./keymap.ts";
 import type { RunRegistry } from "./registry.ts";
@@ -391,14 +390,14 @@ export async function openDashboard(ctx: ExtensionContext, env: DashboardEnv): P
 		}
 		if (exit.kind === "cancel") return;
 		if (exit.kind === "editAgent") {
-			const renamed = await openEditor(ctx, exit.agent);
-			if (renamed) {
-				if (auto.has(renamed.oldName)) auto.set(renamed.newName, auto.get(renamed.oldName)!);
-				auto.delete(renamed.oldName);
-				selected = renamed.newName;
+			const edited = await editAgentWorkbench(ctx, exit.agent, auto.get(exit.agent.name));
+			if (edited) {
+				if (edited.oldName !== edited.newName) auto.delete(edited.oldName);
+				auto.set(edited.newName, edited.auto);
+				selected = edited.newName;
 			}
 		} else if (exit.kind === "newAgent") {
-			await newAgentWizard(ctx);
+			await newAgentWorkbench(ctx);
 		} else if (exit.kind === "settings") {
 			await showPreferences(ctx, env.km, env.state);
 		} else if (exit.kind === "deleteAgent") {
