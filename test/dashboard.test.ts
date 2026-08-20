@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { KeybindingsManager, TUI_KEYBINDINGS, visibleWidth } from "@earendil-works/pi-tui";
 import type { AgentConfig } from "../src/agents.ts";
 import { countActiveExecutions, dashboardAgentIdentity, floorDashboardElapsed, openDashboard, startDashboardElapsedTimer } from "../src/dashboard.ts";
+import { Keymap } from "../src/keymap.ts";
 
 const agent = (name: string): AgentConfig => ({
 	name,
@@ -82,6 +83,12 @@ assert.equal(countActiveExecutions([snapshot([activeNode(1), activeNode(2)])]), 
 
 // Exercise the rendered component. This uses the strongest stable component seam.
 {
+	const keybindings = new KeybindingsManager(TUI_KEYBINDINGS, {
+		"tui.editor.cursorLeft": "l", "tui.editor.cursorRight": "r",
+		"tui.select.confirm": "c", "tui.select.cancel": "x",
+		"pi-subagent-supervisor.toggle": "a", "pi-subagent-supervisor.help": "h",
+	} as any);
+	const km = new Keymap({ getKeybinds: () => ({}) } as any);
 	let component: any;
 	let registryListener = () => {};
 	let snapshots: any[] = [snapshot([activeNode(1), activeNode(2)])];
@@ -92,25 +99,36 @@ assert.equal(countActiveExecutions([snapshot([activeNode(1), activeNode(2)])]), 
 		isProjectTrusted: () => false,
 		ui: {
 			custom: async (factory: any) => {
+				let completed: any;
 				component = factory(
 					{ requestRender: () => { renders++; } },
 					{ fg: (_color: string, text: string) => text, bold: (text: string) => text },
-					{},
-					() => {},
+					keybindings,
+					(result: any) => { completed = result; },
 				);
+				for (const width of [20, 24, 80]) {
+					component.invalidate();
+					assert.ok(component.render(width).every((line: string) => visibleWidth(line) <= width), `dashboard fits width ${width}`);
+				}
 				const wide = component.render(120);
 				assert.ok(wide.every((line: string) => visibleWidth(line) <= 120));
 				assert.match(wide.join("\n"), /roles · 2 active executions · 0 staged routing changes/);
 				assert.match(wide.join("\n"), /Routing · AUTO · model may route/);
-				component.handleInput("A");
+				component.handleInput("a");
 				assert.match(component.render(120).join("\n"), /Routing · MANUAL · slash command or current-turn explicit name/);
 				assert.match(wide.join("\n"), /Live activity/);
+				component.handleInput("h");
+				assert.match(component.render(120).join("\n"), /Agent actions[\s\S]*a +stage auto-routing change[\s\S]*cc +apply staged/);
+				component.handleInput("h");
+				component.handleInput("c");
+				assert.match(component.render(120).join("\n"), /Apply staged auto-routing changes\?.*c again/);
+				component.handleInput("z");
 
 				const narrowList = component.render(80).join("\n");
-				assert.match(narrowList, /List · use right to show detail/);
-				component.handleInput("R");
+				assert.match(narrowList, /List · use r to show detail/);
+				component.handleInput("r");
 				const narrowDetail = component.render(80).join("\n");
-				assert.match(narrowDetail, /Detail · use left to show list/);
+				assert.match(narrowDetail, /Detail · use l to show list/);
 				assert.match(narrowDetail, /Recent stats · 30 days/);
 				component.render(120);
 				component.render(80);
@@ -121,8 +139,11 @@ assert.equal(countActiveExecutions([snapshot([activeNode(1), activeNode(2)])]), 
 				registryListener();
 				assert.equal(renders, before + 1);
 				assert.match(component.render(80).join("\n"), /Quiet/, "live completion updates the open inspector");
-				component.dispose();
-				return { exit: { kind: "cancel" }, auto: new Map(), selected: "worker" };
+				component.handleInput("x");
+				assert.match(component.render(80).join("\n"), /Discard staged auto-routing changes\?.*x again/);
+				component.handleInput("x");
+				assert.equal(completed.exit.kind, "cancel", "second configured cancel closes without applying staged changes");
+				return completed;
 			},
 			notify() {},
 		},
@@ -133,10 +154,7 @@ assert.equal(countActiveExecutions([snapshot([activeNode(1), activeNode(2)])]), 
 			onChange: (listener: () => void) => { registryListener = listener; return () => {}; },
 			activeCallSnapshots: () => snapshots,
 		} as any,
-		km: {
-			matches: (action: string, data: string) => ({ left: "L", right: "R", toggle: "A" } as any)[action] === data,
-			label: (action: string) => action,
-		} as any,
+		km,
 		liveSurface: { setDashboardFocused: (value) => focus.push(value) },
 		runStats: () => new Map(),
 	});

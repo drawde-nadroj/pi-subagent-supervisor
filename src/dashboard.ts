@@ -153,7 +153,7 @@ async function showDashboard(
 	};
 	env.liveSurface.setDashboardFocused(true);
 	try {
-		return await ctx.ui.custom<DashResult>((tui: any, theme: any, _kb: any, done: (result: DashResult) => void) => {
+		return await ctx.ui.custom<DashResult>((tui: any, theme: any, kb: any, done: (result: DashResult) => void) => {
 			const localAuto = new Map(auto0);
 			let index = Math.max(0, agents.findIndex((agent) => agent.name === selected0));
 			let narrowView: "list" | "detail" = "list";
@@ -161,8 +161,8 @@ async function showDashboard(
 			let cachedWidth: number | undefined;
 			let cached: string[] | undefined;
 			const confirmation = new TwoPressConfirmation({
-				isConfirm: (data) => km.matches("confirm", data),
-				isCancel: (data) => km.matches("cancel", data),
+				isConfirm: (data) => km.matches("confirm", data, kb),
+				isCancel: (data) => km.matches("cancel", data, kb),
 			});
 			const refresh = (): void => {
 				cached = undefined;
@@ -198,38 +198,38 @@ async function showDashboard(
 				}
 				if (confirmationResult.kind === "arm") return refresh();
 				const agent = agents[index];
-				if (data === "?") {
+				if (km.matches("help", data, kb)) {
 					help = !help;
 					refresh();
-				} else if (km.matches("left", data)) {
+				} else if (km.matches("left", data, kb)) {
 					narrowView = "list";
 					refresh();
-				} else if (km.matches("right", data)) {
+				} else if (km.matches("right", data, kb)) {
 					narrowView = "detail";
 					refresh();
-				} else if (km.matches("up", data)) {
+				} else if (km.matches("up", data, kb)) {
 					index = Math.max(0, index - 1);
 					refresh();
-				} else if (km.matches("down", data)) {
+				} else if (km.matches("down", data, kb)) {
 					index = Math.min(Math.max(0, agents.length - 1), index + 1);
 					refresh();
-				} else if (km.matches("settings", data)) finish({ kind: "settings" });
-				else if (km.matches("new", data)) finish({ kind: "newAgent" });
-				else if (km.matches("toggle", data) && agent) {
+				} else if (km.matches("settings", data, kb)) finish({ kind: "settings" });
+				else if (km.matches("new", data, kb)) finish({ kind: "newAgent" });
+				else if (km.matches("toggle", data, kb) && agent) {
 					const refusal = agentMutationRefusal(agent, "toggle");
 					if (refusal) ctx.ui.notify(refusal, "warning");
 					else localAuto.set(agent.name, !(localAuto.get(agent.name) ?? agent.auto));
 					refresh();
-				} else if (km.matches("edit", data) && agent) {
+				} else if (km.matches("edit", data, kb) && agent) {
 					const refusal = agentMutationRefusal(agent, "edit");
 					if (refusal) ctx.ui.notify(refusal, "warning");
 					else finish({ kind: "editAgent", agent });
-				} else if (km.matches("delete", data) && agent) {
+				} else if (km.matches("delete", data, kb) && agent) {
 					const refusal = agentMutationRefusal(agent, "delete");
 					if (refusal) ctx.ui.notify(refusal, "warning");
 					else finish({ kind: "deleteAgent", agent });
 				}
-				else if (km.matches("open", data) && agent?.filePath) {
+				else if (km.matches("open", data, kb) && agent?.filePath) {
 					openInOS(agent.filePath);
 					ctx.ui.notify(`Opening ${agent.filePath}`, "info");
 					refresh();
@@ -245,13 +245,13 @@ async function showDashboard(
 				const selected = agents[index];
 				const borderColor = confirmation.borderColor();
 				add(theme.fg(borderColor, "─".repeat(width)));
-				if (confirmation.armed === "confirm") add(theme.fg("success", theme.bold(" Apply staged auto-routing changes?")) + theme.fg("dim", ` ${km.label("confirm")} again applies only ${staged} routing change${staged === 1 ? "" : "s"}`));
-				else if (confirmation.armed === "cancel") add(theme.fg("error", theme.bold(" Discard staged auto-routing changes?")) + theme.fg("dim", ` ${km.label("cancel")} again discards only routing changes`));
+				if (confirmation.armed === "confirm") add(theme.fg("success", theme.bold(" Apply staged auto-routing changes?")) + theme.fg("dim", ` ${km.label("confirm", kb)} again applies only ${staged} routing change${staged === 1 ? "" : "s"}`));
+				else if (confirmation.armed === "cancel") add(theme.fg("error", theme.bold(" Discard staged auto-routing changes?")) + theme.fg("dim", ` ${km.label("cancel", kb)} again discards only routing changes`));
 				else add(theme.fg("text", theme.bold(" Agents")) + theme.fg("dim", ` · ${agents.length} roles · ${countActiveExecutions(snapshots)} active executions · ${staged} staged routing changes`));
 				add();
 
 				const renderList = (panelWidth: number): string[] => {
-					if (!agents.length) return [theme.fg("muted", " No agents found. Create one with " + km.label("new") + ".")];
+					if (!agents.length) return [theme.fg("muted", " No agents found. Create one with " + km.label("new", kb) + ".")];
 					return agents.map((agent, row) => {
 						const focused = row === index;
 						const runs = active.get(agent.name)?.length ?? 0;
@@ -306,7 +306,7 @@ async function showDashboard(
 						add(`${leftLine}${padding} ${theme.fg("dim", "│")} ${right[row] ?? ""}`);
 					}
 				} else {
-					add(theme.fg("dim", narrowView === "list" ? " List · use right to show detail" : " Detail · use left to show list"));
+					add(theme.fg("dim", narrowView === "list" ? ` List · use ${km.label("right", kb)} to show detail` : ` Detail · use ${km.label("left", kb)} to show list`));
 					for (const line of narrowView === "list" ? renderList(width) : renderDetail(width)) add(line);
 				}
 
@@ -314,22 +314,22 @@ async function showDashboard(
 				if (help) {
 					const hint = (key: string, label: string): void => add(`   ${theme.fg("accent", truncateToWidth(key, 8).padEnd(8))} ${theme.fg("dim", label)}`);
 					add(theme.fg("text", theme.bold("Agent actions")));
-					hint(km.label("delete"), "delete");
-					hint(km.label("edit"), "edit");
-					hint(km.label("open"), "open source");
-					hint(km.label("toggle"), "stage auto-routing change");
+					hint(km.label("delete", kb), "delete");
+					hint(km.label("edit", kb), "edit");
+					hint(km.label("open", kb), "open source");
+					hint(km.label("toggle", kb), "stage auto-routing change");
 					add(theme.fg("text", theme.bold("Dashboard actions")));
-					hint(`${km.label("confirm")}${km.label("confirm")}`, "apply staged auto-routing changes");
-					hint(`${km.label("cancel")}${km.label("cancel")}`, "discard staged auto-routing changes");
-					hint(km.label("new"), "new agent");
-					hint(km.label("settings"), "settings");
+					hint(`${km.label("confirm", kb)}${km.label("confirm", kb)}`, "apply staged auto-routing changes");
+					hint(`${km.label("cancel", kb)}${km.label("cancel", kb)}`, "discard staged auto-routing changes");
+					hint(km.label("new", kb), "new agent");
+					hint(km.label("settings", kb), "settings");
 					add(theme.fg("text", theme.bold("Navigation")));
-					hint(`${km.label("left")}/${km.label("right")}`, "list or detail");
-					hint(`${km.label("up")}/${km.label("down")}`, "select");
+					hint(`${km.label("left", kb)}/${km.label("right", kb)}`, "list or detail");
+					hint(`${km.label("up", kb)}/${km.label("down", kb)}`, "select");
 				} else {
 					const actions = selected
-						? `${km.label("delete")} delete  ${km.label("edit")} edit  ${km.label("new")} new  ${km.label("open")} open  ${km.label("toggle")} route  ${km.label("settings")} settings  ? help`
-						: `${km.label("new")} new  ${km.label("settings")} settings  ? help`;
+						? `${km.label("delete", kb)} delete  ${km.label("edit", kb)} edit  ${km.label("new", kb)} new  ${km.label("open", kb)} open  ${km.label("toggle", kb)} route  ${km.label("settings", kb)} settings  ${km.label("help", kb)} help`
+						: `${km.label("new", kb)} new  ${km.label("settings", kb)} settings  ${km.label("help", kb)} help`;
 					add(theme.fg("dim", ` ${actions}`));
 				}
 				add(theme.fg(borderColor, "─".repeat(width)));
@@ -390,14 +390,14 @@ export async function openDashboard(ctx: ExtensionContext, env: DashboardEnv): P
 		}
 		if (exit.kind === "cancel") return;
 		if (exit.kind === "editAgent") {
-			const edited = await editAgentWorkbench(ctx, exit.agent, auto.get(exit.agent.name));
+			const edited = await editAgentWorkbench(ctx, env.km, exit.agent, auto.get(exit.agent.name));
 			if (edited) {
 				if (edited.oldName !== edited.newName) auto.delete(edited.oldName);
 				auto.set(edited.newName, edited.auto);
 				selected = edited.newName;
 			}
 		} else if (exit.kind === "newAgent") {
-			await newAgentWorkbench(ctx);
+			await newAgentWorkbench(ctx, env.km);
 		} else if (exit.kind === "settings") {
 			await showPreferences(ctx, env.km, env.state);
 		} else if (exit.kind === "deleteAgent") {

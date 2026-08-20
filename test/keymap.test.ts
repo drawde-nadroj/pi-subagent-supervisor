@@ -1,10 +1,79 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dataToKeyId, keyIdMatches } from "../src/keymap.ts";
+import { KeybindingsManager, TUI_KEYBINDINGS } from "@earendil-works/pi-tui";
+import { dataToKeyId, Keymap, keyIdMatches } from "../src/keymap.ts";
 
 function label(data: string): string {
 	return JSON.stringify(data);
 }
+
+function stateWith(keybinds: Record<string, string> = {}): any {
+	return { getKeybinds: () => ({ ...keybinds }), setKeybind: () => {} };
+}
+
+test("Keymap uses Pi selection bindings and labels when no legacy override exists", () => {
+	const pi = new KeybindingsManager(TUI_KEYBINDINGS, { "tui.select.up": "k", "tui.select.cancel": "ctrl+x" });
+	const km = new Keymap(stateWith());
+	assert.equal(km.matches("up", "k", pi), true);
+	assert.equal(km.matches("up", "\x1b[A", pi), false);
+	assert.equal(km.label("up", pi), "k");
+	assert.equal(km.label("cancel", pi), "ctrl+x");
+});
+
+test("explicit standard IDs win over legacy state", () => {
+	const pi = new KeybindingsManager(TUI_KEYBINDINGS, { "tui.select.up": "k" });
+	const km = new Keymap(stateWith({ up: "w" }));
+	assert.equal(km.matches("up", "w", pi), false);
+	assert.equal(km.matches("up", "k", pi), true);
+	assert.equal(km.label("up", pi), "k");
+});
+
+test("standard IDs retain legacy state only when Pi has no explicit binding", () => {
+	const pi = new KeybindingsManager(TUI_KEYBINDINGS);
+	const km = new Keymap(stateWith({ up: "w", cancel: "q" }));
+	assert.equal(km.matches("up", "w", pi), true);
+	assert.equal(km.matches("up", "\x1b[A", pi), false);
+	assert.equal(km.label("up", pi), "w");
+	assert.equal(km.matches("cancel", "q", pi), true);
+});
+
+test("package user values take precedence over legacy and support arrays and disable", () => {
+	const km = new Keymap(stateWith({ edit: "w", open: "x" }));
+	const pi = new KeybindingsManager(TUI_KEYBINDINGS, {
+		"pi-subagent-supervisor.edit": ["e", "ctrl+e"],
+		"pi-subagent-supervisor.open": [],
+	} as any);
+	assert.equal(km.matches("edit", "w", pi), false);
+	assert.equal(km.matches("edit", "e", pi), true);
+	assert.equal(km.matches("edit", "\x05", pi), true);
+	assert.equal(km.matches("open", "x", pi), false);
+	assert.equal(km.label("open", pi), "unbound");
+});
+
+test("package actions match Pi key syntax through matchesKey", () => {
+	const bindings = ["ctrl+e", "alt+a", "shift+a", "f1", "up", "1", ","];
+	const inputs = ["\x05", "\x1ba", "A", "\x1bOP", "\x1b[A", "1", ","];
+	const km = new Keymap(stateWith());
+	const pi = new KeybindingsManager(TUI_KEYBINDINGS, { "pi-subagent-supervisor.edit": bindings } as any);
+	for (const input of inputs) assert.equal(km.matches("edit", input, pi), true, JSON.stringify(input));
+});
+
+test("package actions fall back from absent user key to legacy then default", () => {
+	const pi = new KeybindingsManager(TUI_KEYBINDINGS);
+	assert.equal(new Keymap(stateWith({ edit: "w" })).matches("edit", "w", pi), true);
+	assert.equal(new Keymap(stateWith()).matches("edit", "e", pi), true);
+});
+
+test("left and right use Pi editor bindings", () => {
+	const pi = new KeybindingsManager(TUI_KEYBINDINGS, {
+		"tui.editor.cursorLeft": "h",
+		"tui.editor.cursorRight": "l",
+	});
+	const km = new Keymap(stateWith({ left: "x", right: "y" }));
+	assert.equal(km.matches("left", "h", pi), true);
+	assert.equal(km.matches("right", "l", pi), true);
+	assert.equal(km.matches("left", "x", pi), false);
+});
 
 test("dataToKeyId maps supported special input chunks to stable ids", () => {
 	const cases: Array<[data: string, expected: string]> = [

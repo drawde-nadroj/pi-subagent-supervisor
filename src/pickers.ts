@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Key, matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth } from "@earendil-works/pi-tui";
+import type { Keymap } from "./keymap.ts";
 import { COLOR_HEX, colorize } from "./colors.ts";
 
 /** The tools a subagent can be granted. read/grep/find/ls are read-only. */
@@ -15,8 +16,8 @@ export const ALL_TOOLS: Array<{ name: string; note: string }> = [
 
 /** Tool checklist. Returns the selected tool names, or undefined if cancelled.
  * An empty selection means "inherit pi defaults" (read, bash, edit, write). */
-export function pickTools(ctx: ExtensionContext, current: string[]): Promise<string[] | undefined> {
-	return ctx.ui.custom<string[] | undefined>((tui: any, theme: any, _kb: any, done: (r: string[] | undefined) => void) => {
+export function pickTools(ctx: ExtensionContext, km: Keymap, current: string[]): Promise<string[] | undefined> {
+	return ctx.ui.custom<string[] | undefined>((tui: any, theme: any, kb: any, done: (r: string[] | undefined) => void) => {
 		let i = 0;
 		let cached: string[] | undefined;
 		const sel = new Set(current);
@@ -25,28 +26,28 @@ export function pickTools(ctx: ExtensionContext, current: string[]): Promise<str
 			tui.requestRender();
 		};
 		function handleInput(data: string) {
-			if (matchesKey(data, Key.up)) {
+			if (km.matches("up", data, kb)) {
 				i = (i - 1 + ALL_TOOLS.length) % ALL_TOOLS.length;
 				refresh();
 				return;
 			}
-			if (matchesKey(data, Key.down)) {
+			if (km.matches("down", data, kb)) {
 				i = (i + 1) % ALL_TOOLS.length;
 				refresh();
 				return;
 			}
-			if (matchesKey(data, Key.space)) {
+			if (km.matches("toggle", data, kb)) {
 				const n = ALL_TOOLS[i].name;
 				if (sel.has(n)) sel.delete(n);
 				else sel.add(n);
 				refresh();
 				return;
 			}
-			if (matchesKey(data, Key.enter)) {
+			if (km.matches("confirm", data, kb)) {
 				done(ALL_TOOLS.filter((t) => sel.has(t.name)).map((t) => t.name));
 				return;
 			}
-			if (matchesKey(data, Key.escape)) {
+			if (km.matches("cancel", data, kb)) {
 				done(undefined);
 				return;
 			}
@@ -55,7 +56,7 @@ export function pickTools(ctx: ExtensionContext, current: string[]): Promise<str
 			const lines: string[] = [];
 			const add = (t: string) => lines.push(truncateToWidth(t, width));
 			add(theme.fg("accent", "─".repeat(width)));
-			add(theme.fg("text", " Tools") + theme.fg("dim", "   ↑↓ move   space toggle   ⏎ save   esc cancel"));
+			add(theme.fg("text", " Tools") + theme.fg("dim", `   ${km.label("up", kb)}/${km.label("down", kb)} move   ${km.label("toggle", kb)} toggle   ${km.label("confirm", kb)} save   ${km.label("cancel", kb)} cancel`));
 			add(theme.fg("dim", " (none selected = pi default: read, bash, edit, write)"));
 			lines.push("");
 			for (let j = 0; j < ALL_TOOLS.length; j++) {
@@ -85,12 +86,13 @@ export function pickTools(ctx: ExtensionContext, current: string[]): Promise<str
  * on cancel. Windows the list so a long option set (many models) stays on screen. */
 export function pickMulti(
 	ctx: ExtensionContext,
+	km: Keymap,
 	title: string,
 	options: Array<{ name: string; note?: string }>,
 	current: string[],
 	hint?: string,
 ): Promise<string[] | undefined> {
-	return ctx.ui.custom<string[] | undefined>((tui: any, theme: any, _kb: any, done: (r: string[] | undefined) => void) => {
+	return ctx.ui.custom<string[] | undefined>((tui: any, theme: any, kb: any, done: (r: string[] | undefined) => void) => {
 		let i = 0;
 		let cached: string[] | undefined;
 		// Ordered selection: index in this array = the order the item will be emitted in.
@@ -107,21 +109,21 @@ export function pickMulti(
 		};
 		function handleInput(data: string) {
 			if (options.length === 0) {
-				if (matchesKey(data, Key.enter) || matchesKey(data, Key.escape)) done(matchesKey(data, Key.enter) ? [] : undefined);
+				if (km.matches("confirm", data, kb) || km.matches("cancel", data, kb)) done(km.matches("confirm", data, kb) ? [] : undefined);
 				return;
 			}
-			if (matchesKey(data, Key.up)) {
+			if (km.matches("up", data, kb)) {
 				i = (i - 1 + options.length) % options.length;
 				refresh();
-			} else if (matchesKey(data, Key.down)) {
+			} else if (km.matches("down", data, kb)) {
 				i = (i + 1) % options.length;
 				refresh();
-			} else if (matchesKey(data, Key.space)) {
+			} else if (km.matches("toggle", data, kb)) {
 				toggle(options[i].name);
 				refresh();
-			} else if (matchesKey(data, Key.enter)) {
+			} else if (km.matches("confirm", data, kb)) {
 				done([...sel]);
-			} else if (matchesKey(data, Key.escape)) {
+			} else if (km.matches("cancel", data, kb)) {
 				done(undefined);
 			}
 		}
@@ -129,7 +131,7 @@ export function pickMulti(
 			const lines: string[] = [];
 			const add = (t: string) => lines.push(truncateToWidth(t, width));
 			add(theme.fg("accent", "─".repeat(width)));
-			add(theme.fg("text", ` ${title}`) + theme.fg("dim", "   ↑↓ move   space toggle   ⏎ save   esc cancel"));
+			add(theme.fg("text", ` ${title}`) + theme.fg("dim", `   ${km.label("up", kb)}/${km.label("down", kb)} move   ${km.label("toggle", kb)} toggle   ${km.label("confirm", kb)} save   ${km.label("cancel", kb)} cancel`));
 			if (hint) add(theme.fg("dim", ` ${hint}`));
 			lines.push("");
 			if (options.length === 0) {
@@ -166,9 +168,9 @@ export function pickMulti(
 
 /** Standalone swatch color picker overlay. Returns the chosen color name, or
  * undefined if cancelled. */
-export function pickColor(ctx: ExtensionContext, current: string): Promise<string | undefined> {
+export function pickColor(ctx: ExtensionContext, km: Keymap, current: string): Promise<string | undefined> {
 	const colors = Object.keys(COLOR_HEX);
-	return ctx.ui.custom<string | undefined>((tui: any, theme: any, _kb: any, done: (r: string | undefined) => void) => {
+	return ctx.ui.custom<string | undefined>((tui: any, theme: any, kb: any, done: (r: string | undefined) => void) => {
 		let i = Math.max(0, colors.indexOf(current));
 		let cached: string[] | undefined;
 		const refresh = () => {
@@ -176,21 +178,21 @@ export function pickColor(ctx: ExtensionContext, current: string): Promise<strin
 			tui.requestRender();
 		};
 		function handleInput(data: string) {
-			if (matchesKey(data, Key.left) || matchesKey(data, Key.up)) {
+			if (km.matches("left", data, kb) || km.matches("up", data, kb)) {
 				i = (i - 1 + colors.length) % colors.length;
 				refresh();
 				return;
 			}
-			if (matchesKey(data, Key.right) || matchesKey(data, Key.down)) {
+			if (km.matches("right", data, kb) || km.matches("down", data, kb)) {
 				i = (i + 1) % colors.length;
 				refresh();
 				return;
 			}
-			if (matchesKey(data, Key.enter)) {
+			if (km.matches("confirm", data, kb)) {
 				done(colors[i]);
 				return;
 			}
-			if (matchesKey(data, Key.escape)) {
+			if (km.matches("cancel", data, kb)) {
 				done(undefined);
 				return;
 			}
@@ -199,7 +201,7 @@ export function pickColor(ctx: ExtensionContext, current: string): Promise<strin
 			const lines: string[] = [];
 			const add = (t: string) => lines.push(truncateToWidth(t, width));
 			add(theme.fg("accent", "─".repeat(width)));
-			add(theme.fg("text", " Pick a color") + theme.fg("muted", "   ←→ move   ⏎ choose   esc cancel"));
+			add(theme.fg("text", " Pick a color") + theme.fg("muted", `   ${km.label("left", kb)}/${km.label("right", kb)} move   ${km.label("confirm", kb)} choose   ${km.label("cancel", kb)} cancel`));
 			lines.push("");
 			const swatches = colors.map((c, j) => (j === i ? `[${colorize(c, "●")}]` : ` ${colorize(c, "●")} `)).join("");
 			add(` ${swatches}`);

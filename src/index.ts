@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Container, isKeyRelease, Markdown, matchesKey, Text, truncateToWidth, type Component } from "@earendil-works/pi-tui";
+import { Container, Markdown, Text, truncateToWidth, type Component } from "@earendil-works/pi-tui";
 import { getMarkdownTheme, keyText } from "@earendil-works/pi-coding-agent";
 import { appendDebuggerNudge, isTestOrBuildCommand } from "./backstops.ts";
 import { agentDisplayName, discoverAgents } from "./agents.ts";
@@ -204,7 +204,6 @@ export default function (pi: ExtensionAPI) {
 
 	registerSubagentTool(pi, deps);
 
-
 	pi.on("tool_result", async (event, ctx) => {
 		if (event.toolName !== "bash" || !event.isError) return;
 		const command = String(event.input.command ?? "");
@@ -338,13 +337,6 @@ export default function (pi: ExtensionAPI) {
 		holder.ctx = ctx;
 		registerAgentCommands(ctx);
 		if (!ctx.hasUI) return;
-		// Raw terminal listeners run before focused components and built-in
-		// keybindings; registered shortcuts only reach Pi's default editor.
-		ctx.ui.onTerminalInput((data) => {
-			if (isKeyRelease(data) || !matchesKey(data, "ctrl+shift+o")) return;
-			ctx.ui.setToolsExpanded(true);
-			return { consume: true };
-		});
 		// The footer carries bounded live progress plus a cumulative cost segment.
 		// Cost is refreshed on every run change.
 		if (!costStatusWired) {

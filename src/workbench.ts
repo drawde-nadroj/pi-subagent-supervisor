@@ -8,6 +8,7 @@ import { applyCustomToolSelection, createAgentDraft, draftFromAgent, draftToWrit
 import { discoverAgents, type AgentConfig } from "./agents.ts";
 import { runAgent } from "./engine.ts";
 import { pickColor, pickMulti, pickTools } from "./pickers.ts";
+import type { Keymap } from "./keymap.ts";
 import { TwoPressConfirmation } from "./two-press-confirmation.ts";
 
 export const WORKBENCH_STAGES = ["Identity", "Routing", "Capabilities", "Instructions", "Output", "Review"] as const;
@@ -169,37 +170,37 @@ const FIELD_LABELS: Record<string, string> = {
 	output: "Output", resultView: "Result view", save: "Save",
 };
 
-export function renderWorkbench(draft: AgentDraft, state: WorkbenchState, width: number, mode: WorkbenchMode = { kind: "create" }): string[] {
+export function renderWorkbench(draft: AgentDraft, state: WorkbenchState, width: number, mode: WorkbenchMode = { kind: "create" }, keys = { up: "↑", down: "↓", confirm: "⏎", cancel: "esc", suggest: "Tab", back: "b" }): string[] {
 	width = Math.max(1, width);
 	const labels = workbenchLabels(mode);
 	const lines = [
 		`${labels.title} · ${WORKBENCH_STAGES[state.stage]}   ${state.stage + 1}/6`,
-		"b    back",
-		"esc  discard",
-		"⏎    edit / next",
-		"↑↓   select",
+		`${keys.back}    back`,
+		`${keys.cancel}  discard`,
+		`${keys.confirm}    edit / next`,
+		`${keys.up}/${keys.down}   select`,
 		"",
 	];
-	if (state.stage === 5) lines.push(`${labels.action}: press ⏎ twice`, "", ...reviewPreview(draft, width, mode));
+	if (state.stage === 5) lines.push(`${labels.action}: press ${keys.confirm} twice`, "", ...reviewPreview(draft, width, mode));
 	else {
 		STAGE_ROWS[state.stage].forEach((field, index) => {
 			const label = field === "save" ? labels.action : FIELD_LABELS[field];
 			lines.push(`${index === state.selected ? ">" : " "} ${label}: ${rowValue(field, draft, mode)}`);
 		});
 		const selected = STAGE_ROWS[state.stage][state.selected];
-		if (selected === "description" || selected === "systemPrompt") lines.push("", "Tab  Want a suggestion?");
+		if (selected === "description" || selected === "systemPrompt") lines.push("", `${keys.suggest}  Want a suggestion?`);
 	}
 	return lines.map((line) => truncateToWidth(line, width));
 }
 
-function showStage(ctx: ExtensionContext, draft: AgentDraft, initial: WorkbenchState, mode: WorkbenchMode): Promise<{ intent: WorkbenchIntent; state: WorkbenchState }> {
+function showStage(ctx: ExtensionContext, km: Keymap, draft: AgentDraft, initial: WorkbenchState, mode: WorkbenchMode): Promise<{ intent: WorkbenchIntent; state: WorkbenchState }> {
 	return ctx.ui.custom((tui: any, theme: any, injected: any, done: (result: { intent: WorkbenchIntent; state: WorkbenchState }) => void) => {
 		let state = initial;
 		let cached: string[] | undefined;
 		let cachedWidth: number | undefined;
 		const keys = injected;
 		const confirmation = new TwoPressConfirmation({
-			isConfirm: (data) => keys.matches(data, "tui.select.confirm"),
+			isConfirm: (data) => km.matches("confirm", data, keys),
 			// Escape always discards the draft; it is not a two-press action here.
 			isCancel: () => false,
 		});
@@ -215,15 +216,15 @@ function showStage(ctx: ExtensionContext, draft: AgentDraft, initial: WorkbenchS
 				if (result.kind === "arm") { refresh(); return; }
 				if (result.kind === "disarm") refresh();
 			}
-			if (keys.matches(data, "tui.select.cancel")) return done({ intent: { action: "cancel" }, state });
-			if (data === "b") return done({ intent: { action: "back" }, state });
+			if (km.matches("cancel", data, keys)) return done({ intent: { action: "cancel" }, state });
+			if (km.matches("back", data, keys)) return done({ intent: { action: "back" }, state });
 			const selected = STAGE_ROWS[state.stage][state.selected];
-			if (keys.matches(data, "tui.input.tab") && (selected === "description" || selected === "systemPrompt")) {
+			if (km.matches("suggest", data, keys) && (selected === "description" || selected === "systemPrompt")) {
 				return done({ intent: { action: "suggest", field: selected }, state });
 			}
-			if (keys.matches(data, "tui.select.up")) { state = moveWorkbench(state, -1); refresh(); return; }
-			if (keys.matches(data, "tui.select.down")) { state = moveWorkbench(state, 1); refresh(); return; }
-			if (!keys.matches(data, "tui.select.confirm") || state.stage === 5) return;
+			if (km.matches("up", data, keys)) { state = moveWorkbench(state, -1); refresh(); return; }
+			if (km.matches("down", data, keys)) { state = moveWorkbench(state, 1); refresh(); return; }
+			if (!km.matches("confirm", data, keys) || state.stage === 5) return;
 			done({ intent: { action: "edit", field: STAGE_ROWS[state.stage][state.selected] }, state });
 		}
 		return {
@@ -231,13 +232,17 @@ function showStage(ctx: ExtensionContext, draft: AgentDraft, initial: WorkbenchS
 				width = Math.max(1, width);
 				if (!cached || cachedWidth !== width) {
 					cachedWidth = width;
-					const body = renderWorkbench(draft, state, Math.max(1, width - 2), mode);
+					const body = renderWorkbench(draft, state, Math.max(1, width - 2), mode, {
+						up: km.label("up", keys), down: km.label("down", keys),
+						confirm: km.label("confirm", keys), cancel: km.label("cancel", keys),
+						suggest: km.label("suggest", keys), back: km.label("back", keys),
+					});
 					cached = [
 						theme.fg(confirmation.borderColor(), "─".repeat(width)),
 						...body.map((line) => truncateToWidth(` ${line}`, width)),
 						theme.fg(confirmation.borderColor(), "─".repeat(width)),
 					];
-					if (state.stage === 5 && confirmation.armed === "confirm") cached.splice(-1, 0, truncateToWidth(theme.fg("success", ` ⏎ again to ${workbenchLabels(mode).committed}`), width));
+					if (state.stage === 5 && confirmation.armed === "confirm") cached.splice(-1, 0, truncateToWidth(theme.fg("success", ` ${km.label("confirm", keys)} again to ${workbenchLabels(mode).committed}`), width));
 				}
 				return cached;
 			},
@@ -247,7 +252,7 @@ function showStage(ctx: ExtensionContext, draft: AgentDraft, initial: WorkbenchS
 	});
 }
 
-async function draftSuggestion(ctx: ExtensionContext, draft: AgentDraft, field: "description" | "systemPrompt"): Promise<string | undefined> {
+async function draftSuggestion(ctx: ExtensionContext, km: Keymap, draft: AgentDraft, field: "description" | "systemPrompt"): Promise<string | undefined> {
 	const task = field === "description"
 		? `Write a single-line "when to delegate" description for a subagent named "${draft.name}", using "use proactively"/"always use for" cues so a parent AI knows when to call it. Output only the line.`
 		: `Write a concise system prompt for a subagent named "${draft.name}" described as: ${draft.description}. Cover its role, a few clear rules (including tool use), and how it should format its final output. Output only the prompt.`;
@@ -268,30 +273,30 @@ async function draftSuggestion(ctx: ExtensionContext, draft: AgentDraft, field: 
 			}
 		})();
 		return {
-			render(width: number) { return [truncateToWidth(theme.fg("accent", "Thinking super duper hard…"), width), truncateToWidth(theme.fg("dim", "esc  cancel suggestion"), width)]; },
+			render(width: number) { return [truncateToWidth(theme.fg("accent", "Thinking super duper hard…"), width), truncateToWidth(theme.fg("dim", `${km.label("cancel", keys)}  cancel suggestion`), width)]; },
 			invalidate() {},
-			handleInput(data: string) { if (keys.matches(data, "tui.select.cancel")) { closed = true; abort.abort(); done(undefined); } },
+			handleInput(data: string) { if (km.matches("cancel", data, keys)) { closed = true; abort.abort(); done(undefined); } },
 		};
 	});
 }
 
-async function applySuggestionFlow(ctx: ExtensionContext, draft: AgentDraft, field: "description" | "systemPrompt"): Promise<boolean> {
+async function applySuggestionFlow(ctx: ExtensionContext, km: Keymap, draft: AgentDraft, field: "description" | "systemPrompt"): Promise<boolean> {
 	const current = draft[field];
-	const suggestion = await draftSuggestion(ctx, draft, field);
+	const suggestion = await draftSuggestion(ctx, km, draft, field);
 	if (!suggestion) return false;
-	const edited = await ctx.ui.editor("Review suggestion — submit to accept, esc to keep the current value", suggestion);
+	const edited = await ctx.ui.editor("Review suggestion — submit to accept, cancel to keep the current value", suggestion);
 	if (edited === undefined) return false;
 	draft[field] = acceptProvisionalSuggestion(current, edited);
 	return true;
 }
 
-async function editField(ctx: ExtensionContext, draft: AgentDraft, field: string, models: string[], roster: string[]): Promise<boolean> {
+async function editField(ctx: ExtensionContext, km: Keymap, draft: AgentDraft, field: string, models: string[], roster: string[]): Promise<boolean> {
 	if (field === "name" || field === "displayName") {
 		const value = await ctx.ui.input(field === "name" ? "Role / command identity" : "Display name (optional)", draft[field]);
 		if (value === undefined) return false;
 		draft[field] = value;
 	} else if (field === "color") {
-		const value = await pickColor(ctx, draft.color);
+		const value = await pickColor(ctx, km, draft.color);
 		if (!value) return false;
 		draft.color = value;
 	} else if (field === "auto" || field === "conventions") {
@@ -300,7 +305,7 @@ async function editField(ctx: ExtensionContext, draft: AgentDraft, field: string
 		const current = draft[field];
 		const value = await ctx.ui.editor(`${field === "description" ? "When to delegate" : "Agent instructions"} — type /suggest here to use the original AI drafter`, current);
 		if (value === "/suggest") {
-			return applySuggestionFlow(ctx, draft, field);
+			return applySuggestionFlow(ctx, km, draft, field);
 		} else {
 			if (value === undefined) return false;
 			draft[field] = value;
@@ -321,7 +326,7 @@ async function editField(ctx: ExtensionContext, draft: AgentDraft, field: string
 			draft.toolMode = choice.includes("no tools") ? "none" : "defaults";
 			draft.tools = [];
 		} else {
-			const selected = await pickTools(ctx, draft.tools);
+			const selected = await pickTools(ctx, km, draft.tools);
 			if (selected === undefined) return false;
 			const result = applyCustomToolSelection(draft, selected, access);
 			if ("error" in result) { ctx.ui.notify(result.error, "error"); return false; }
@@ -336,7 +341,7 @@ async function editField(ctx: ExtensionContext, draft: AgentDraft, field: string
 		if (choice === undefined) return false;
 		draft.model = choice === "inherited" ? "" : choices[labels.indexOf(choice) - 1].name;
 	} else if (field === "fallback") {
-		const value = await pickMulti(ctx, "Fallback models", mergeSavedChoices(models, draft.fallback), draft.fallback, "tried in selected order on provider errors");
+		const value = await pickMulti(ctx, km, "Fallback models", mergeSavedChoices(models, draft.fallback), draft.fallback, "tried in selected order on provider errors");
 		if (value === undefined) return false;
 		draft.fallback = value;
 	} else if (field === "thinking") {
@@ -346,7 +351,7 @@ async function editField(ctx: ExtensionContext, draft: AgentDraft, field: string
 		if (choice === undefined) return false;
 		draft.thinking = choice === "inherited" ? "" : choices[labels.indexOf(choice) - 1].name;
 	} else if (field === "spawn") {
-		const value = await pickMulti(ctx, "Spawn targets", mergeSavedChoices(roster, draft.spawn), draft.spawn);
+		const value = await pickMulti(ctx, km, "Spawn targets", mergeSavedChoices(roster, draft.spawn), draft.spawn);
 		if (value === undefined) return false;
 		draft.spawn = value;
 	} else if (field === "resultView") {
@@ -386,7 +391,7 @@ export function persistEditDraft(agent: AgentConfig, draft: AgentDraft): Workben
 	return { oldName: agent.name, newName: writable.name, auto: draft.auto };
 }
 
-export async function openAgentWorkbench(ctx: ExtensionContext, mode: WorkbenchMode): Promise<WorkbenchEditResult | undefined> {
+export async function openAgentWorkbench(ctx: ExtensionContext, km: Keymap, mode: WorkbenchMode): Promise<WorkbenchEditResult | undefined> {
 	if (mode.kind === "edit") {
 		const refusal = agentMutationRefusal(mode.agent, "edit");
 		if (refusal) {
@@ -400,16 +405,16 @@ export async function openAgentWorkbench(ctx: ExtensionContext, mode: WorkbenchM
 	const roster = [...new Set(discoverAgents(ctx.cwd, { includeProject: (ctx as any).isProjectTrusted?.() ?? false }).agents.map((agent) => agent.name))];
 	let state: WorkbenchState = { stage: 0, selected: 0 };
 	while (true) {
-		const { intent, state: latest } = await showStage(ctx, draft, state, mode);
+		const { intent, state: latest } = await showStage(ctx, km, draft, state, mode);
 		state = latest;
 		if (intent.action === "cancel") return undefined;
 		if (intent.action === "back") { state = retreatWorkbench(state); continue; }
 		if (intent.action === "suggest" && (intent.field === "description" || intent.field === "systemPrompt")) {
-			await applySuggestionFlow(ctx, draft, intent.field);
+			await applySuggestionFlow(ctx, km, draft, intent.field);
 			continue;
 		}
 		if (intent.action === "edit" && intent.field) {
-			const accepted = await editField(ctx, draft, intent.field, models, roster);
+			const accepted = await editField(ctx, km, draft, intent.field, models, roster);
 			if (accepted) {
 				const lastRow = state.selected === STAGE_ROWS[state.stage].length - 1;
 				state = lastRow ? advanceWorkbench(state) : moveWorkbench(state, 1);
@@ -455,10 +460,10 @@ export async function openAgentWorkbench(ctx: ExtensionContext, mode: WorkbenchM
 	}
 }
 
-export function newAgentWorkbench(ctx: ExtensionContext): Promise<void> {
-	return openAgentWorkbench(ctx, { kind: "create" }).then(() => undefined);
+export function newAgentWorkbench(ctx: ExtensionContext, km: Keymap): Promise<void> {
+	return openAgentWorkbench(ctx, km, { kind: "create" }).then(() => undefined);
 }
 
-export function editAgentWorkbench(ctx: ExtensionContext, agent: AgentConfig, effectiveAuto?: boolean): Promise<WorkbenchEditResult | undefined> {
-	return openAgentWorkbench(ctx, { kind: "edit", agent, effectiveAuto });
+export function editAgentWorkbench(ctx: ExtensionContext, km: Keymap, agent: AgentConfig, effectiveAuto?: boolean): Promise<WorkbenchEditResult | undefined> {
+	return openAgentWorkbench(ctx, km, { kind: "edit", agent, effectiveAuto });
 }

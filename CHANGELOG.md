@@ -16,6 +16,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Moved supervisor keybindings to `~/.pi/agent/keybindings.json`, with package action IDs, string/array/disabled values, Pi-native selection bindings, legacy-state fallback, configurable UI hints, and reload documentation.
+- Deprecated the Preferences keybinding editor; it is now read-only guidance and performs no binding writes.
+- Removed the legacy `Ctrl+Shift+O` shortcut and terminal listener entirely.
 - Existing agents now use the lossless AgentDraft workbench with bounded model, thinking, permission, delegation, and output controls; unavailable saved choices remain preserved.
 - Structured-result descriptors are versioned validation recipes; canonical child text remains authoritative and parsed values are never persisted.
 - Documentation now distinguishes transcript task/result visibility, parent-model return shapes, slash-command output, structured views, and telemetry-only run history.

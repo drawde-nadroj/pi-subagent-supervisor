@@ -8,6 +8,7 @@ import { visibleWidth } from "@earendil-works/pi-tui";
 import { serializeAgent, writeAgentFile } from "../src/agent-writer.ts";
 import { applyCustomToolSelection, createAgentDraft, draftFromAgent, draftToWritable, parseCustomReturns } from "../src/agent-draft.ts";
 import { clearDiscoverCache, discoverAgents, parseAgentFile, type AgentConfig } from "../src/agents.ts";
+import { Keymap } from "../src/keymap.ts";
 import { TwoPressConfirmation } from "../src/two-press-confirmation.ts";
 import { acceptProvisionalSuggestion, advanceWorkbench, agentForEdit, editPersistenceDecision, mergeSavedChoices, moveWorkbench, openAgentWorkbench, persistEditDraft, renderWorkbench, retreatWorkbench, reviewPreview, scopedModelNames, workbenchLabels, workbenchModelNames, workbenchOutputName, workbenchThinkingLevels, validateWorkbenchDraft, WORKBENCH_STAGES } from "../src/workbench.ts";
 
@@ -274,7 +275,8 @@ test("project Edit is refused before opening the workbench", async () => {
 	const notices: string[] = [];
 	const project = { name: "project", source: "project" } as AgentConfig;
 	const ctx = { ui: { notify: (message: string) => notices.push(message), custom: () => { throw new Error("workbench opened"); } } } as any;
-	assert.equal(await openAgentWorkbench(ctx, { kind: "edit", agent: project }), undefined);
+	const km = new Keymap({ getKeybinds: () => ({}) } as any);
+	assert.equal(await openAgentWorkbench(ctx, km, { kind: "edit", agent: project }), undefined);
 	assert.match(notices[0], /read-only/);
 });
 

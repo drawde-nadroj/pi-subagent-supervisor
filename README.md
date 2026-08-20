@@ -117,6 +117,53 @@ New and existing user definitions use the same staged workbench: Identity, Routi
 
 Children do not receive the parent transcript, extensions, skills, or the normal context-file stack. `conventions: true` adds only global and path-scoped `AGENTS.md` files. Models inherit by default; fallback models run only after quota, authentication, network, availability, or similar provider errors—not ordinary task failure.
 
+### Keybindings
+
+Configure keys in `~/.pi/agent/keybindings.json`, then run `/reload`. Standard navigation inherits Pi's `tui.select.up`, `tui.select.down`, `tui.select.confirm`, and `tui.select.cancel` bindings. Left/right inherit `tui.editor.cursorLeft` and `tui.editor.cursorRight`; suggestions inherit `tui.input.tab`. The dashboard, Preferences, Create/Edit workbench, and pickers use these bindings and show their configured keys in hints.
+
+Supervisor actions use these package IDs:
+
+| ID | Default |
+| --- | --- |
+| `pi-subagent-supervisor.toggle` | `space` |
+| `pi-subagent-supervisor.edit` | `e` |
+| `pi-subagent-supervisor.new` | `n` |
+| `pi-subagent-supervisor.delete` | `d` |
+| `pi-subagent-supervisor.settings` | `,` |
+| `pi-subagent-supervisor.open` | `o` |
+| `pi-subagent-supervisor.help` | `?` |
+| `pi-subagent-supervisor.back` | `b` |
+
+The inherited standard actions are:
+
+| Pi ID | Focused use |
+| --- | --- |
+| `tui.select.up` / `tui.select.down` | List movement |
+| `tui.select.confirm` / `tui.select.cancel` | Confirm and cancel |
+| `tui.editor.cursorLeft` / `tui.editor.cursorRight` | Left/right movement |
+| `tui.input.tab` | Workbench suggestions |
+
+Values may be one key, an array of keys, or `[]` to disable an action. This complete example preserves package defaults while also adding Vim-style list movement:
+
+```json
+{
+  "pi-subagent-supervisor.toggle": "space",
+  "pi-subagent-supervisor.edit": "e",
+  "pi-subagent-supervisor.new": "n",
+  "pi-subagent-supervisor.delete": "d",
+  "pi-subagent-supervisor.settings": ",",
+  "pi-subagent-supervisor.open": "o",
+  "pi-subagent-supervisor.help": "?",
+  "pi-subagent-supervisor.back": "b",
+  "tui.select.up": ["up", "k"],
+  "tui.select.down": ["down", "j"]
+}
+```
+
+For example, change a value to `["e", "ctrl+e"]` to bind two keys or to `[]` to disable that package action.
+
+An explicit package or standard Pi entry, including `[]`, wins over a key saved by older supervisor versions and over the default. Without an explicit entry for that action, a legacy saved key remains as a compatibility fallback for one release; otherwise the package or Pi default applies. The old Preferences keybinding editor is removed and no longer writes bindings. Pi 0.84.2 does not register or conflict-check these package-specific IDs; the extension reads only its own entries preserved in Pi's user bindings.
+
 A `returns` schema adds validation and one repair turn when enabled. Structured results default to **Readable** presentation. Each agent may inherit the global preference or override it with **Readable** or **Exact JSON**. Exact JSON is `JSON.stringify` of the validated extracted value; metadata or extraction failures fall back to raw final text. Pi's configured tool-output expansion shortcut (`Ctrl+O` by default) shows both views; expansion is global, not a focusable per-row control. Presentation changes only the TUI: canonical parent-facing tool content, substitutions, nested returns, result/error semantics, and `RunResult.finalText` remain unchanged.
 
 Nested delegation is depth-limited; nested parallel calls require every target to be read-only. Parallel and nested work can increase usage quickly.
@@ -131,7 +178,7 @@ Use `/agents history off` to stop new history while retaining existing entries, 
 
 ## Limitations
 
-Dashboard keys are remappable. The shared Create/Edit workbench writes only after two Review confirmations; cancel discards its full draft. Editor and picker sub-overlays still use their fixed default navigation keys.
+Focused dashboard, Preferences, workbench, and picker controls are remappable as described above. The shared Create/Edit workbench writes only after two Review confirmations; cancel discards its full draft.
 
 ## Development
 
