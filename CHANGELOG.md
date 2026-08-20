@@ -13,9 +13,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Dashboard, unified staged Create/Edit agent workbench, run history, cost reporting, and bundled agent roles.
 - Readable and exact structured-result views, including dedicated Findings, Review, and Decision presentations and a per-agent override.
 - Opt-in, bounded Effective prompt capture for terminal run inspection, with runtime attempt metadata and explicit privacy disclosures.
+- Guided ordered Custom output-contract fields in Subagent Studio, with scalar and scalar-list types, required state, live runtime-backed previews, and lossless preserve-only handling for unsupported schemas.
 
 ### Changed
 
+- Replaced `/agents` with `/subagents` and evolved the dashboard into Subagent Studio, with three wide panels and equivalent focused narrow views.
 - Moved supervisor keybindings to `~/.pi/agent/keybindings.json`, with package action IDs, string/array/disabled values, Pi-native selection bindings, legacy-state fallback, configurable UI hints, and reload documentation.
 - Deprecated the Preferences keybinding editor; it is now read-only guidance and performs no binding writes.
 - Removed the legacy `Ctrl+Shift+O` shortcut and terminal listener entirely.

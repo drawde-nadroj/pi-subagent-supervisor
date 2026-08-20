@@ -5,7 +5,7 @@ import type { RunRecord } from "./registry.ts";
 export { getDefaultRunLogPath } from "./storage.ts";
 
 /** One finished run, persisted as a JSON line in runs.jsonl. This is the feedback
- * loop for delegation tuning: aggregate it (`/agents stats`) to see whether each
+ * loop for delegation tuning: aggregate it (`/subagents stats`) to see whether each
  * agent's spawns actually pay for themselves across sessions. */
 export interface RunLogEntry {
 	ts: string;
@@ -73,6 +73,11 @@ export function filterRecentEntries(entries: RunLogEntry[], days: number): RunLo
 		const t = Date.parse(e.ts);
 		return Number.isNaN(t) || t >= cutoff; // undated/corrupt ts: keep rather than silently drop
 	});
+}
+
+/** Keep only entries recorded for the current Studio working directory. */
+export function filterEntriesByCwd(entries: RunLogEntry[], cwd: string): RunLogEntry[] {
+	return entries.filter((entry) => entry.cwd === cwd);
 }
 
 /** Best-effort append; a broken log must never break a run. */
@@ -183,7 +188,7 @@ function fmtMs(ms: number): string {
 	return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-/** Aligned monospace table for the /agents stats transcript message. `windowLabel`
+/** Aligned monospace table for the /subagents stats transcript message. `windowLabel`
  * names the time span the numbers cover (e.g. "last 30 days" / "all sessions"). */
 export function formatRunStats(stats: AgentRunStats[], windowLabel = "all sessions"): string[] {
 	if (stats.length === 0) return [`No subagent runs logged (${windowLabel}).`];

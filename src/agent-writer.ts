@@ -31,6 +31,13 @@ export function agentMutationRefusal(agent: Pick<AgentConfig, "source">, action:
 	return undefined;
 }
 
+export function serializeOutputFrontmatter(a: Pick<WritableAgent, "returns" | "resultView">): string[] {
+	if (!a.returns) return [];
+	const lines = [`returns: ${JSON.stringify(a.returns)}`];
+	if (a.resultView) lines.push(`resultView: ${a.resultView}`);
+	return lines;
+}
+
 export function serializeAgent(a: WritableAgent): string {
 	const lines: string[] = ["---"];
 	lines.push(`name: ${yamlString(a.name)}`);
@@ -44,8 +51,7 @@ export function serializeAgent(a: WritableAgent): string {
 	if (a.readonly) lines.push("readonly: true");
 	lines.push(`color: ${yamlString(a.color)}`);
 	if (a.conventions) lines.push("conventions: true");
-	if (a.returns) lines.push(`returns: ${JSON.stringify(a.returns)}`);
-	if (a.returns && a.resultView) lines.push(`resultView: ${a.resultView}`);
+	lines.push(...serializeOutputFrontmatter(a));
 	if (a.spawn && a.spawn.length > 0) lines.push(`spawn: [${a.spawn.map(yamlString).join(", ")}]`);
 	lines.push("---", "", a.systemPrompt.trim(), "");
 	return lines.join("\n");
@@ -158,6 +164,22 @@ export function writeAgentFile(a: WritableAgent, dir: string): string {
 	createRegularFile(file, serializeAgent(a));
 	clearDiscoverCache();
 	return file;
+}
+
+export function readUserOverride(name: string): AgentConfig | undefined {
+	const filePath = findUserIdentityPath(name);
+	if (!filePath) return undefined;
+	const current = parseAgentFile(readRegularFile(filePath), filePath, "user");
+	if (!current || current.name !== name) throw new Error(`Agent identity changed while editing: ${name}`);
+	return current;
+}
+
+export function readUserAgentFile(agent: Pick<AgentConfig, "name" | "source" | "filePath">): AgentConfig {
+	if (agent.source !== "user") throw new Error("Only user agent definitions can be reloaded for writing");
+	assertUserFilePath(agent.filePath);
+	const current = parseAgentFile(readRegularFile(agent.filePath), agent.filePath, "user");
+	if (!current || current.name !== agent.name) throw new Error(`Agent identity changed while editing: ${agent.name}`);
+	return current;
 }
 
 export function updateAgentFile(agent: WritableAgent & Pick<AgentConfig, "source" | "filePath">): void {

@@ -14,7 +14,7 @@ import { presentMessageIdentity, terminalOutputSummary, type StoredMessageIdenti
 import { RunRegistry, type CallSnapshot } from "./registry.ts";
 import { SubagentState } from "./state.ts";
 import { type DispatchDeps, dispatchSingle, fmtDuration, registerSubagentTool } from "./tool.ts";
-import { aggregateRunStats, appendRunLogIfEnabled, entryFromRecord, filterRecentEntries, formatRunStats, getDefaultRunLogPath, readRunLog } from "./runlog.ts";
+import { aggregateRunStats, appendRunLogIfEnabled, entryFromRecord, filterEntriesByCwd, filterRecentEntries, formatRunStats, getDefaultRunLogPath, readRunLog } from "./runlog.ts";
 import { migrateLegacyStorage } from "./storage.ts";
 import { EFFECTIVE_PROMPT_CALL_LIMIT, EFFECTIVE_PROMPT_MAX_ATTEMPTS, effectivePromptBytes, normalizeEffectivePrompt, renderEffectivePromptAttempt, type EffectivePromptCaptureEntry } from "./effective-prompt.ts";
 
@@ -149,7 +149,7 @@ export default function (pi: ExtensionAPI) {
 		});
 	};
 
-	// /agents stats — the per-agent cost table, monospace-aligned in the transcript.
+	// /subagents stats — the per-agent cost table, monospace-aligned in the transcript.
 	pi.registerMessageRenderer<{ lines: string[] }>("subagent-stats", (msg, _opts, theme) => {
 		const d = msg.details;
 		if (!d) return undefined;
@@ -164,7 +164,7 @@ export default function (pi: ExtensionAPI) {
 
 	// Default to a recent window — the actionable tuning signal is "is this agent
 	// paying off *lately*", not a lifetime average that never forgets an old bad run.
-	// `/agents stats all` shows the full history.
+	// `/subagents stats all` shows the full history.
 	const STATS_WINDOW_DAYS = 30;
 	const showStats = (all: boolean): void => {
 		const entries = readRunLog(runLogPath);
@@ -175,7 +175,7 @@ export default function (pi: ExtensionAPI) {
 	const showRoster = (ctx: ExtensionContext): void => {
 		const { agents } = discoverAgents(ctx.cwd, { includeProject: ctx.isProjectTrusted?.() ?? false });
 		const lines = agents.length
-			? ["Available subagents:", ...agents.map((a) => `- /${a.name} <task> — ${a.description}`), "", "Other commands: /agents stats, /agents history on|off|status|clear, /agents returns [on|off], /agents -k"]
+			? ["Available subagents:", ...agents.map((a) => `- /${a.name} <task> — ${a.description}`), "", "Other commands: /subagents stats, /subagents history on|off|status|clear, /subagents returns [on|off], /subagents -k"]
 			: ["No subagents discovered."];
 		showCommandLines(lines);
 	};
@@ -233,8 +233,8 @@ export default function (pi: ExtensionAPI) {
 		return block ? { systemPrompt: `${event.systemPrompt}\n${block}` } : {};
 	});
 
-	pi.registerCommand("agents", {
-		description: "Open the subagents dashboard. `/agents -k` kills running subagents; `/agents stats` shows recent cost history; `/agents history on|off|status|clear` controls local history; `/agents returns [on|off]` toggles structured returns.",
+	pi.registerCommand("subagents", {
+		description: "Open Subagent Studio. `/subagents -k` kills running subagents; `/subagents stats` shows recent cost history; `/subagents history on|off|status|clear` controls local history; `/subagents returns [on|off]` toggles structured returns.",
 		handler: async (args, ctx) => {
 			holder.ctx = ctx;
 			const a = args.trim();
@@ -253,7 +253,7 @@ export default function (pi: ExtensionAPI) {
 				else showCommandLines([result.message]);
 				return;
 			}
-			// `/agents returns [on|off]` — toggle `returns:` schema enforcement.
+			// `/subagents returns [on|off]` — toggle `returns:` schema enforcement.
 			if (a.startsWith("returns")) {
 				const rest = a.slice(7).trim().toLowerCase();
 				const next = rest === "on" ? true : rest === "off" ? false : !state.getStructuredReturns();
@@ -269,8 +269,9 @@ export default function (pi: ExtensionAPI) {
 			}
 			await openDashboard(ctx, {
 				state, registry, km, liveSurface,
-				// Roster cost column mirrors the default `/agents stats` window (recent, not lifetime).
-				runStats: () => new Map(aggregateRunStats(filterRecentEntries(readRunLog(runLogPath), STATS_WINDOW_DAYS)).map((s) => [s.agent, s])),
+				// Studio is project-scoped; the transcript `/subagents stats` command remains global.
+				runStats: () => new Map(aggregateRunStats(filterRecentEntries(filterEntriesByCwd(readRunLog(runLogPath), ctx.cwd), STATS_WINDOW_DAYS)).map((s) => [s.agent, s])),
+				latestRuns: () => new Map(filterEntriesByCwd(readRunLog(runLogPath), ctx.cwd).map((entry) => [entry.agent, entry])),
 			});
 			// Pick up any agent created or renamed via the workbench so its /<name> command exists immediately.
 			registerAgentCommands(ctx);
@@ -278,7 +279,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.registerCommand("stop-agents", {
-		description: "Kill all running subagents (same as /agents -k)",
+		description: "Kill all running subagents (same as /subagents -k)",
 		handler: async (_args, ctx) => {
 			holder.ctx = ctx;
 			killAll(ctx);
@@ -297,7 +298,7 @@ export default function (pi: ExtensionAPI) {
 						holder.ctx = c;
 						const current = discoverAgents(c.cwd, { includeProject: c.isProjectTrusted?.() ?? false }).agents.find((agent) => agent.name === a.name);
 						if (!current) {
-							showOutput(a.name, { ok: false, finalText: "", error: `Agent '${a.name}' no longer exists. Run /agents to refresh the roster.`, usage: emptyUsage(), contextPercent: null });
+							showOutput(a.name, { ok: false, finalText: "", error: `Agent '${a.name}' no longer exists. Run /subagents to refresh the roster.`, usage: emptyUsage(), contextPercent: null });
 							return;
 						}
 						const trimmed = args.trim();

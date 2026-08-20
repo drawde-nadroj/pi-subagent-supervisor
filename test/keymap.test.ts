@@ -62,6 +62,22 @@ test("package actions fall back from absent user key to legacy then default", ()
 	const pi = new KeybindingsManager(TUI_KEYBINDINGS);
 	assert.equal(new Keymap(stateWith({ edit: "w" })).matches("edit", "w", pi), true);
 	assert.equal(new Keymap(stateWith()).matches("edit", "e", pi), true);
+	assert.equal(new Keymap(stateWith()).matches("preview", "p", pi), true);
+});
+
+test("Preview and Custom reordering are dedicated remappable package actions", () => {
+	const pi = new KeybindingsManager(TUI_KEYBINDINGS, {
+		"pi-subagent-supervisor.preview": "v",
+		"pi-subagent-supervisor.reorderUp": "u",
+		"pi-subagent-supervisor.reorderDown": "m",
+	} as any);
+	const km = new Keymap(stateWith());
+	assert.equal(km.matches("preview", "v", pi), true);
+	assert.equal(km.matches("preview", "p", pi), false);
+	assert.equal(km.label("preview", pi), "v");
+	assert.equal(km.matches("reorderUp", "u", pi), true);
+	assert.equal(km.matches("reorderDown", "m", pi), true);
+	assert.equal(km.label("reorderUp", pi), "u");
 });
 
 test("left and right use Pi editor bindings", () => {

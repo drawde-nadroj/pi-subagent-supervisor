@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { aggregateRunStats, appendRunLog, appendRunLogIfEnabled, clearRunLog, entryFromRecord, failureCategory, filterRecentEntries, formatRunStats, getDefaultRunLogPath, readRunLog, type RunLogEntry } from "../src/runlog.ts";
+import { aggregateRunStats, appendRunLog, appendRunLogIfEnabled, clearRunLog, entryFromRecord, failureCategory, filterEntriesByCwd, filterRecentEntries, formatRunStats, getDefaultRunLogPath, readRunLog, type RunLogEntry } from "../src/runlog.ts";
 import { RunRegistry } from "../src/registry.ts";
 import { createPersona } from "../src/persona.ts";
 import { emptyUsage } from "../src/engine.ts";
@@ -72,6 +72,14 @@ fs.appendFileSync(tmp, "not json\n{\"broken\":\n");
 appendRunLog(tmp, entry({ agent: "worker", cost: 0.2, durationMs: 90_000, output: 800 }));
 const read = readRunLog(tmp);
 assert.equal(read.length, 3);
+
+// Studio history is scoped to entries whose recorded cwd exactly matches its cwd.
+const mixedCwds = [
+	entry({ agent: "debugger", task: "current project", cwd: "/work/current" }),
+	entry({ agent: "debugger", task: "other project", cwd: "/work/other" }),
+	entry({ agent: "scout", task: "legacy entry" }),
+];
+assert.deepEqual(filterEntriesByCwd(mixedCwds, "/work/current").map((item) => item.task), ["current project"]);
 
 // clear deletes only the history file, distinguishes an absent file, and surfaces other errors.
 const stateFile = path.join(path.dirname(tmp), "state.json");

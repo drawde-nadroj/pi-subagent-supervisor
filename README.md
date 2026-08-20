@@ -7,7 +7,7 @@ A transparent supervisor for isolated Pi subagents. Configure how each role work
 - isolated child sessions with separate prompts and in-memory session state
 - model-facing `subagent` tool and per-role slash commands
 - up to 10 parallel tasks with one immediate respawn per failed branch, plus ordered sequences with configured execution-failure retries
-- dashboard and staged workbench for routing, creating, inspecting, editing, opening, and deleting custom roles
+- Subagent Studio and a staged workbench for routing, creating, inspecting, configuring, opening, and deleting custom roles
 - model selection, provider-error fallback models, thinking level, tool limits, read-only mode, project conventions, structured returns, and nested delegation
 - visible assigned tasks and terminal results for model-tool roots and their nested subagents
 - live run status, token/cost reporting, stop controls, and local aggregate statistics
@@ -42,15 +42,15 @@ For one session without installing, use `pi -e /absolute/path/to/pi-subagent-sup
 
 ## Use
 
-- `/agents` opens the dashboard.
-- `/agents -k` stops all active subagents.
-- `/agents stats` shows the last 30 days; `/agents stats all` shows all local history.
-- `/agents history on|off|status|clear` controls local run-history recording. Recording defaults to on; turning it off retains existing history, and `clear` deletes it without changing the preference.
-- `/agents returns on|off` controls structured-return enforcement.
+- `/subagents` opens Subagent Studio.
+- `/subagents -k` stops all active subagents.
+- `/subagents stats` shows the last 30 days; `/subagents stats all` shows all local history.
+- `/subagents history on|off|status|clear` controls local run-history recording. Recording defaults to on; turning it off retains existing history, and `clear` deletes it without changing the preference.
+- `/subagents returns on|off` controls structured-return enforcement.
 - `/stop-agents` stops active runs.
 - `/<role> <task>` runs one discovered role.
 
-Automatic and explicit subagent runs call the configured model and can add provider usage, cost, and latency. Parallel work can reduce elapsed time but multiply usage; retries and dependent or nested delegation can extend completion time. Use `/agents stats` to inspect recorded totals.
+Automatic and explicit subagent runs call the configured model and can add provider usage, cost, and latency. Parallel work can reduce elapsed time but multiply usage; retries and dependent or nested delegation can extend completion time. Use `/subagents stats` to inspect recorded totals.
 
 The model-facing tool accepts exactly one mode:
 
@@ -109,9 +109,9 @@ Compatibility aliases remain supported: `fallbackModels` for `fallback`, `fork` 
 
 ## Customization
 
-To disable automatic routing for a role, open `/agents`, select the role, press the configured Toggle key (`space` by default) to stage the change, then press the configured Confirm key twice (`Enter` by default) to apply it. Dashboard changes to `auto` are staged, not applied immediately: confirm the staged changes to write them, or cancel to leave disk unchanged. Package-managed bundled files are never changed: editing a bundled role or confirming its staged `auto` value creates a same-name user override under `~/.pi/agent/agents`. A bundled identity cannot be renamed in place; create a new role instead. Bundled roles cannot be deleted. Deleting a user override can reveal the bundled default beneath it.
+To disable automatic routing for a role, open `/subagents`, select the role, press the configured Toggle key (`space` by default) to stage the change, then press the configured Confirm key twice (`Enter` by default) to apply it. Studio changes to `auto` are staged, not applied immediately: confirm the staged changes to write them, or cancel to leave disk unchanged. Package-managed bundled files are never changed: configuring a bundled role or confirming its staged `auto` value creates a same-name user override under `~/.pi/agent/agents`. A bundled identity cannot be renamed in place; create a new role instead. Bundled roles cannot be deleted. Deleting a user override can reveal the bundled default beneath it.
 
-New and existing user definitions use the same staged workbench: Identity, Routing, Capabilities, Instructions, Output, and Review. Existing values remain selected even when their model, thinking level, fallback, or spawn target is not currently available. Saving an edited bundled role creates a same-name user override; bundled identities cannot be renamed. User renames use collision-safe persistence. Trusted project definitions are visible in the dashboard but Edit is refused; change those source files externally.
+Subagent Studio shows role and live state, selected-role configuration and actions, and output-contract plus latest/live status in three columns on wide terminals; narrow terminals expose the same information as focused views. Press Contract (`c` by default) to edit None, Findings, Review, Decision, Custom, and Readable/Exact JSON directly in Studio with deterministic sample previews; Preview (`p` by default) switches between the narrow editor and preview. Guided Custom contracts are ordered root-object fields with String, Number, Boolean, or scalar-list types and required/optional state. Canonical JavaScript array-index field names (`0` through `4294967294`) are preserve-only because JavaScript reorders them. Add, rename, delete, reorder, change type, and toggle required directly in Studio. Existing flat compatible Custom schemas load into the guide without changing field order. Unsupported Custom schemas remain exact and preserve-only until the explicit replace action; Studio never flattens them. Contract changes use an in-memory edit, review, and two-confirmation save flow; invalid guided fields block Review and cancel never writes. If Contract and Confirm share a key, Contract opens the editor when no auto-routing changes are staged. Confirm takes priority while staged routing changes exist and throughout Output review and save. New and existing user definitions also retain the focused staged workbench for Identity, Routing, Capabilities, Instructions, Output, and Review. Existing values remain selected even when their model, thinking level, fallback, or spawn target is not currently available. Saving an edited bundled role creates a same-name user override; bundled identities cannot be renamed. User renames use collision-safe persistence. Trusted project definitions are visible in Subagent Studio but Configure and Contract editing are refused; change those source files externally.
 
 ## Execution details
 
@@ -119,7 +119,7 @@ Children do not receive the parent transcript, extensions, skills, or the normal
 
 ### Keybindings
 
-Configure keys in `~/.pi/agent/keybindings.json`, then run `/reload`. Standard navigation inherits Pi's `tui.select.up`, `tui.select.down`, `tui.select.confirm`, and `tui.select.cancel` bindings. Left/right inherit `tui.editor.cursorLeft` and `tui.editor.cursorRight`; suggestions inherit `tui.input.tab`. The dashboard, Preferences, Create/Edit workbench, and pickers use these bindings and show their configured keys in hints.
+Configure keys in `~/.pi/agent/keybindings.json`, then run `/reload`. Standard navigation inherits Pi's `tui.select.up`, `tui.select.down`, `tui.select.confirm`, and `tui.select.cancel` bindings. Left/right inherit `tui.editor.cursorLeft` and `tui.editor.cursorRight`; suggestions inherit `tui.input.tab`. Subagent Studio, Preferences, the Create/Edit workbench, and pickers use these bindings and show their configured keys in hints.
 
 Supervisor actions use these package IDs:
 
@@ -127,6 +127,10 @@ Supervisor actions use these package IDs:
 | --- | --- |
 | `pi-subagent-supervisor.toggle` | `space` |
 | `pi-subagent-supervisor.edit` | `e` |
+| `pi-subagent-supervisor.contract` | `c` |
+| `pi-subagent-supervisor.preview` | `p` |
+| `pi-subagent-supervisor.reorderUp` | `[` |
+| `pi-subagent-supervisor.reorderDown` | `]` |
 | `pi-subagent-supervisor.new` | `n` |
 | `pi-subagent-supervisor.delete` | `d` |
 | `pi-subagent-supervisor.settings` | `,` |
@@ -149,6 +153,10 @@ Values may be one key, an array of keys, or `[]` to disable an action. This comp
 {
   "pi-subagent-supervisor.toggle": "space",
   "pi-subagent-supervisor.edit": "e",
+  "pi-subagent-supervisor.contract": "c",
+  "pi-subagent-supervisor.preview": "p",
+  "pi-subagent-supervisor.reorderUp": "[",
+  "pi-subagent-supervisor.reorderDown": "]",
   "pi-subagent-supervisor.new": "n",
   "pi-subagent-supervisor.delete": "d",
   "pi-subagent-supervisor.settings": ",",
@@ -174,11 +182,11 @@ Preferences and history live outside the installed package under `~/.pi/agent/pi
 
 Prompt capture is stored only in the parent Pi session, not in `state.json` or `runs.jsonl`; `state.json` stores only the `promptCaptureEnabled` preference.
 
-Use `/agents history off` to stop new history while retaining existing entries, or `/agents history clear` to delete only `runs.jsonl`. To remove all extension data after uninstalling, delete the `pi-subagents` data directory manually.
+Use `/subagents history off` to stop new history while retaining existing entries, or `/subagents history clear` to delete only `runs.jsonl`. To remove all extension data after uninstalling, delete the `pi-subagents` data directory manually.
 
 ## Limitations
 
-Focused dashboard, Preferences, workbench, and picker controls are remappable as described above. The shared Create/Edit workbench writes only after two Review confirmations; cancel discards its full draft.
+Focused Studio, Preferences, workbench, and picker controls are remappable as described above. The shared Create/Edit workbench writes only after two Review confirmations; cancel discards its full draft.
 
 ## Development
 

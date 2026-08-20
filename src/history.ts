@@ -8,7 +8,7 @@ export interface HistoryPreference {
 	setHistoryEnabled(on: boolean): void;
 }
 
-/** Parse only the `/agents` argument suffix owned by history commands. */
+/** Parse only the `/subagents` argument suffix owned by history commands. */
 export function parseHistoryCommand(args: string): HistoryAction | "invalid" | undefined {
 	const parts = args.trim().toLowerCase().split(/\s+/);
 	if (parts[0] !== "history") return undefined;
@@ -25,7 +25,7 @@ export function executeHistoryCommand(
 	runLogPath: string,
 	clear: (file: string) => boolean = clearRunLog,
 ): HistoryCommandResult {
-	if (action === "invalid") return { message: "Usage: /agents history on|off|status|clear", level: "error" };
+	if (action === "invalid") return { message: "Usage: /subagents history on|off|status|clear", level: "error" };
 	if (action === "status") {
 		return {
 			message: state.getHistoryEnabled()

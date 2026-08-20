@@ -142,7 +142,7 @@ export function reviewPreview(draft: AgentDraft, width: number, mode: WorkbenchM
 	const persistedAuto = mode.kind === "edit" ? mode.agent.auto : draft.auto;
 	const writable = accessValid ? draftToWritable({ ...draft, auto: persistedAuto }) : undefined;
 	const pendingAuto = mode.kind === "edit" && draft.auto !== mode.agent.auto
-		? [`Pending dashboard confirmation only: Auto routing will become ${draft.auto ? "proactive" : "manual"}.`]
+		? [`Pending Studio confirmation only: Auto routing will become ${draft.auto ? "proactive" : "manual"}.`]
 		: [];
 	const permissions = draft.access === "unset"
 		? "unset"

@@ -1,13 +1,13 @@
 import { Key, matchesKey, type KeybindingsManager } from "@earendil-works/pi-tui";
 import type { SubagentState } from "./state.ts";
 
-export type Action = "up" | "down" | "left" | "right" | "toggle" | "confirm" | "cancel" | "edit" | "new" | "delete" | "settings" | "suggest" | "open" | "help" | "back";
-type LegacyAction = Exclude<Action, "help" | "back">;
+export type Action = "up" | "down" | "left" | "right" | "toggle" | "confirm" | "cancel" | "edit" | "contract" | "preview" | "new" | "delete" | "settings" | "suggest" | "open" | "help" | "back" | "reorderUp" | "reorderDown";
+type LegacyAction = Exclude<Action, "contract" | "preview" | "help" | "back" | "reorderUp" | "reorderDown">;
 
 export const DEFAULT_KEYS: Record<Action, string> = {
 	up: "up", down: "down", left: "left", right: "right", toggle: "space",
-	confirm: "enter", cancel: "escape", edit: "e", new: "n", delete: "d",
-	settings: ",", suggest: "tab", open: "o", help: "?", back: "b",
+	confirm: "enter", cancel: "escape", edit: "e", contract: "c", preview: "p", new: "n", delete: "d",
+	settings: ",", suggest: "tab", open: "o", help: "?", back: "b", reorderUp: "[", reorderDown: "]",
 };
 
 const STANDARD: Partial<Record<Action,
@@ -22,7 +22,7 @@ const STANDARD: Partial<Record<Action,
 	suggest: "tui.input.tab",
 };
 
-const PACKAGE = new Set<Action>(["toggle", "edit", "new", "delete", "settings", "open", "help", "back"]);
+const PACKAGE = new Set<Action>(["toggle", "edit", "contract", "preview", "new", "delete", "settings", "open", "help", "back", "reorderUp", "reorderDown"]);
 const SPECIAL_KEY: Record<string, any> = {
 	up: Key.up, down: Key.down, left: Key.left, right: Key.right,
 	enter: Key.enter, escape: Key.escape, space: Key.space, tab: Key.tab,

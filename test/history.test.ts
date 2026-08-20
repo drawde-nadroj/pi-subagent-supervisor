@@ -56,7 +56,7 @@ assert.deepEqual(clearError, {
 	level: "error",
 });
 assert.deepEqual(executeHistoryCommand("invalid", state, "/history"), {
-	message: "Usage: /agents history on|off|status|clear",
+	message: "Usage: /subagents history on|off|status|clear",
 	level: "error",
 });
 

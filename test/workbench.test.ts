@@ -86,7 +86,7 @@ test("edit review serializes persisted auto and labels staged auto changes separ
 		const serialized = preview.slice(preview.indexOf("Serialized definition:") + 1).map((line) => line.slice(2)).join("\n") + "\n";
 
 		assert.equal(serialized, serializeAgent(draftToWritable({ ...draft, auto: agent.auto })));
-		assert.ok(preview.includes(`Pending dashboard confirmation only: Auto routing will become ${stagedAuto ? "proactive" : "manual"}.`));
+		assert.ok(preview.includes(`Pending Studio confirmation only: Auto routing will become ${stagedAuto ? "proactive" : "manual"}.`));
 		assert.equal(preview[0], `Routing: ${persistedAuto ? "proactive" : "manual"}; Use for implementation`);
 	}
 });
@@ -98,7 +98,7 @@ test("edit review omits pending auto notice when dashboard state matches persist
 	draft.description = "Use for implementation";
 	draft.systemPrompt = "Implement changes.";
 	const agent = { ...draftToWritable(draft), source: "user" } as AgentConfig;
-	assert.doesNotMatch(reviewPreview(draft, 200, { kind: "edit", agent }).join("\n"), /Pending dashboard confirmation/);
+	assert.doesNotMatch(reviewPreview(draft, 200, { kind: "edit", agent }).join("\n"), /Pending Studio confirmation/);
 });
 
 test("suggestions remain provisional and model choices preserve scoped order without duplicates", () => {
